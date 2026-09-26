@@ -158,7 +158,48 @@ EBAY_TERMS = ("rtx 5090", "rtx pro 6000 blackwell", "rtx pro 5000 blackwell",
               "dgx spark", "tenstorrent", "jetson agx thor", "mac studio m5 max 128")
 
 
+def _ebay_api(sleep: float = 1.0):
+    """Browse API route: same terms, JSON instead of scraped HTML."""
+    from . import ebay_api
+    for term in EBAY_TERMS:
+        n = 0
+        try:
+            for it in ebay_api.search(term):
+                n += 1
+                price = (it.get("price") or {}).get("value")
+                cur = (it.get("price") or {}).get("currency")
+                if price is None or not cur:
+                    continue
+                cond = (it.get("conditionDescription") or "").lower()
+                link = (it.get("link") or {}).get("href") or \
+                    "https://www.ebay.com/itm/" + str(it.get("itemId", ""))
+                yield Candidate(source="ebay", ext_id=str(it.get("itemId", "")),
+                                url=link,
+                                title=html.unescape(it.get("title") or ""),
+                                price=float(price), currency=cur,
+                                country=(it.get("itemLocation") or {})
+                                .get("country", "US").lower(),
+                                condition="used" if "used" in cond or "pre-owned" in cond else
+                                ("new" if "new" in cond else ""),
+                                evidence="ebay-browse-api",
+                                meta={"term": term,
+                                      "shipping": (it.get("shippingOptions") or [{}])[0]
+                                      .get("importTax", "")})
+        except Exception as e:
+            print(f"  [ebay api] {term!r}: {str(e)[:120]}", flush=True)
+            raise
+        time.sleep(sleep)
+
+
 def ebay(sleep: float = 6.0):
+    from . import ebay_api
+    if ebay_api.available():
+        try:
+            yield from _ebay_api()
+            return
+        except Exception as e:
+            print(f"  [ebay] Browse API failed ({str(e)[:100]}), ladder takes over",
+                  flush=True)
     # search listing pages answer through the ladder; item pages do not
     for term in EBAY_TERMS:
         url = ("https://www.ebay.com/sch/i.html?" + urlencode(

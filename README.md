@@ -15,7 +15,9 @@ Export: ~/.local/state/fp4sweep/market.json
 
 Sources: OpenSooq (all GCC domains, __NEXT_DATA__ products), Haraj
 (browserless), dubizzle (SERP snippets, AED-marker required), eBay
-(search pages via the fetch ladder; Browse API when keys exist), a SearXNG
+(search pages via the fetch ladder; Browse API when keys exist - drop
+`{"app_id": "...", "cert_id": "..."}` into ~/.config/fp4sweep/ebay.json and
+the next crawl uses the official API instead of scraping), a SearXNG
 discovery loop that loads every unknown domain a catalog-term query finds,
 and curated retail pages (Tenstorrent, ComputaHardware).
 
