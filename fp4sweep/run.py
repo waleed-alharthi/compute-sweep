@@ -21,6 +21,7 @@ ADAPTERS = {
     "opensooq": adapters.opensooq,
     "haraj": adapters.haraj,
     "ebay": adapters.ebay,
+    "aliexpress": adapters.aliexpress,
     "dubizzle": adapters.dubizzle,
     "discovery": adapters.discovery,
     "retail": adapters.retail,

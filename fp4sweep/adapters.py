@@ -229,6 +229,41 @@ def ebay(sleep: float = 6.0):
                             evidence=rung, meta={"term": term})
         time.sleep(sleep)
 
+# ---------------------------------------------------------------- AliExpress
+
+AE_TERMS = ("rtx 5090", "rtx pro 6000", "dgx spark", "tenstorrent",
+            "jetson agx thor", "ascent gx10", "rtx 5090 gpu")
+
+
+def aliexpress(sleep: float = 1.0):
+    from . import aliexpress_api
+    if not aliexpress_api.available():
+        return
+    for term in AE_TERMS:
+        try:
+            for it in aliexpress_api.product_query(term):
+                pid = str(it.get("product_id") or it.get("productId") or "")
+                amount = it.get("sum_amount") or it.get("sumAmount") or \
+                    (it.get("sale_price") or {})
+                try:
+                    price = float(str(amount).strip())
+                except (TypeError, ValueError):
+                    continue
+                if price < 100:
+                    continue
+                yield Candidate(
+                    source="aliexpress", ext_id=pid,
+                    url=f"https://www.aliexpress.com/item/{pid}.html",
+                    title=html.unescape(str(it.get("subject") or term)),
+                    price=price, currency=it.get("currency") or "USD",
+                    country="cn", condition="new",
+                    evidence="ae-api", meta={"term": term})
+        except Exception as e:
+            print(f"  [aliexpress] {term!r}: {str(e)[:120]}", flush=True)
+            return
+        time.sleep(sleep)
+
+
 # ---------------------------------------------------------------- SearXNG:
 # dubizzle (Imperva-walled, priced URL slugs) + the dark-alley discovery loop
 

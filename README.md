@@ -21,6 +21,12 @@ the next crawl uses the official API instead of scraping), a SearXNG
 discovery loop that loads every unknown domain a catalog-term query finds,
 and curated retail pages (Tenstorrent, ComputaHardware).
 
+API-gated sources (silent until keys exist): eBay Browse API reads
+~/.config/fp4sweep/ebay.json `{"app_id": "...", "cert_id": "..."}`;
+AliExpress affiliate search reads ~/.config/fp4sweep/aliexpress.json
+`{"app_key": "...", "app_secret": "..."}` (optional `gateway` and
+`sign_method` keys; default gateway api-sg.aliexpress.com, md5 signing).
+
 Evidence levels travel with every row: `direct`, `browser`, `serp` - a
 snippet-price is never presented as a page-price.
 
