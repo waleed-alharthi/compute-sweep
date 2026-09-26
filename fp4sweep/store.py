@@ -57,6 +57,13 @@ WANTED_RE = re.compile(
     r"\bwir kaufen\b|^\s*suche\b|"
     r"مطلوب|أبحث|ابحث|نبحث|نريد|اريده", re.I)
 
+# accessory/part titles that match a GPU pattern but are not the card
+ACCESSORY_RE = re.compile(
+    r"water\s?block|backplate|bracket|shroud|riser|riserless|schematic|"
+    r"thermal pad|\bfan\b|cooler|heatsink|\bcable\b|adapter|sleeve|"
+    r"\bcase\b|\bpsu\b|\bmb\b|motherboard|repair|donor|\bshell\b|"
+    r"shaper|\bstand\b|holder|\bport|liquid \b", re.I)
+
 
 def gpu_count(title: str) -> int:
     """"4x RTX 5090" / "quad 5090" workstations: the price is for the pile,
@@ -97,6 +104,8 @@ class Store:
             return
         entry, vram = match_catalog(c.title, catalog)
         matched = entry is not None and vram is not None and vram >= MIN_VRAM
+        if matched and ACCESSORY_RE.search(c.title or ""):
+            return  # "$240 RTX 5090" is a water block, not a card
         key = f"{c.source}:{c.ext_id}"
         old = self.db.execute(
             "SELECT usd, hits, last_price_change, currency FROM listings WHERE key=?",

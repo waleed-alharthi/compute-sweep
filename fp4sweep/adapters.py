@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 
 from .config import SEARXNG
 from .extract import extract_page
-from .fetch import FetchError, get
+from .fetch import FetchError, _browserless, get
 from .model import Candidate, parse_price
 
 # ---------------------------------------------------------------- OpenSooq
@@ -353,6 +353,182 @@ def indiamart(sleep: float = 3.0):
                             price=pp[0], currency="INR", country="in",
                             condition="new", evidence=rung, meta={"term": term})
         time.sleep(sleep)
+
+
+# ------------------------------------------------- browser/direct custom parses
+
+CL_CITIES = ("sfbay", "newyork", "losangeles", "chicago", "dallas", "seattle",
+             "boston", "miami", "atlanta", "washingtondc", "philadelphia",
+             "denver", "portland", "austin", "phoenix")
+
+
+def craigslist(sleep: float = 2.0):
+    for term in ("rtx 5090", "rtx pro 6000", "dgx spark", "tenstorrent"):
+        for city in CL_CITIES:
+            url = (f"https://{city}.craigslist.org/search/sss?"
+                   + urlencode({"query": term, "min_price": 100}))
+            try:
+                body, rung = get(url)
+            except FetchError:
+                continue
+            for m in re.finditer(
+                    r'<li class="cl-static-search-result" title="([^"]{8,150})">'
+                    r'\s*<a href="([^"]+)".{0,200}?'
+                    r'<div class="price">\$([\d,]+)', body, re.S):
+                title, href, price = m.groups()
+                pp = parse_price("$" + price, "USD")
+                if not pp or pp[0] < 100:
+                    continue
+                yield Candidate(source="craigslist",
+                                ext_id=href.rstrip("/").rsplit("/", 1)[-1],
+                                url=href, title=html.unescape(title),
+                                price=pp[0], currency="USD", country="us",
+                                condition="used", evidence=rung,
+                                meta={"city": city, "term": term})
+            time.sleep(sleep)
+
+
+def marktplaats(sleep: float = 3.0):
+    for term in ("rtx 5090", "rtx pro 6000", "dgx spark"):
+        url = "https://www.marktplaats.nl/q/" + term.replace(" ", "-") + "/"
+        try:
+            body, rung = get(url)
+        except FetchError:
+            continue
+        state = _next_data(body)
+        seen = set()
+
+        def walk(node):
+            if isinstance(node, dict):
+                pi = node.get("priceInfo")
+                ttl = node.get("title")
+                vid = node.get("vipId") or node.get("itemId")
+                if pi and ttl and vid and str(vid) not in seen:
+                    cents = (pi or {}).get("priceCents")
+                    ptype = (pi or {}).get("priceType", "")
+                    if cents and ptype in ("FIXED", "NEGOTIABLE", "SEE_DESCRIPTION") \
+                            and ptype != "SEE_DESCRIPTION":
+                        seen.add(str(vid))
+                        pp = (cents or 0) / 100.0
+                        if pp >= 100:
+                            yield Candidate(
+                                source="marktplaats", ext_id=str(vid),
+                                url="https://www.marktplaats.nl/v/"
+                                    "a/" + str(vid),
+                                title=html.unescape(str(ttl)),
+                                price=pp, currency="EUR", country="nl",
+                                condition="used", evidence=rung,
+                                meta={"term": term})
+                for v in node.values():
+                    yield from walk(v)
+            elif isinstance(node, list):
+                for v in node:
+                    yield from walk(v)
+        if state is not None:
+            yield from walk(state)
+        time.sleep(sleep)
+
+
+def kijiji(sleep: float = 2.0):
+    """Search pages are bot-walled, but item pages are SSR with ld+json
+    Offers - same pattern as haraj: the search index finds the ad urls."""
+    import datetime as dt
+    today = dt.date.today().isoformat()
+    for term in ("kijiji rtx 5090", "kijiji rtx pro 6000", "kijiji dgx spark",
+                 "kijiji tenstorrent"):
+        for r in _searxng(term):
+            url = r.get("url") or ""
+            m = re.match(r"https://www\.kijiji\.ca/v-[a-z-]+/[a-z-]+/.+/(\d{9,})",
+                         url)
+            if not m:
+                continue
+            try:
+                body, rung = get(url)
+            except FetchError:
+                continue
+            off = re.search(r'"@type":\s*"Offer","availability[^"]*"[^"]*",'
+                            r'"price":"([\d.]+)","priceCurrency":"CAD"'
+                            r'(?:.*?"validThrough":"(\d{4}-\d\d-\d\d)")?',
+                            body, re.S)
+            nm = re.search(r'"@type":\s*"Product","name":"([^"]+)"', body)
+            if not (off and nm):
+                continue
+            if off.group(2) and off.group(2) < today:
+                continue  # the index still serves expired ads
+            price = float(off.group(1))
+            if price < 100:
+                continue
+            yield Candidate(source="kijiji", ext_id=m.group(1), url=url,
+                            title=html.unescape(nm.group(1)),
+                            price=price, currency="CAD", country="ca",
+                            condition="used", evidence=rung,
+                            meta={"term": term})
+        time.sleep(sleep)
+
+
+def amazon(sleep: float = 5.0):
+    """Search results are browser-rung only: direct gets a 200 soft-block page."""
+    for term in ("rtx 5090", "rtx pro 6000", "dgx spark", "tenstorrent"):
+        url = "https://www.amazon.com/s?" + urlencode({"k": term})
+        try:
+            body = _browserless(url)
+        except Exception:
+            continue
+        seen = set()
+        for blk in re.split(r'data-asin="', body)[1:]:
+            asin = re.match(r"([A-Z0-9]{10})", blk)
+            if not asin or asin.group(1) in seen:
+                continue
+            t = re.search(r'<h2[^>]*>.*?<span[^>]*>([^<]{15,150})</span>',
+                          blk, re.S) or re.search(
+                r'"([^"]{15,150}?)"[^>]*class="[^"]*a-text-normal', blk)
+            p = re.search(r'class="a-offscreen">\$([\d,]+(?:\.\d\d)?)', blk)
+            if not (t and p):
+                continue
+            pp = parse_price("$" + p.group(1), "USD")
+            if not pp or pp[0] < 100:
+                continue
+            seen.add(asin.group(1))
+            yield Candidate(source="amazon", ext_id=asin.group(1),
+                            url="https://www.amazon.com/dp/" + asin.group(1),
+                            title=html.unescape(t.group(1)),
+                            price=pp[0], currency="USD", country="us",
+                            condition="new", evidence="browser",
+                            meta={"term": term})
+        time.sleep(sleep)
+
+
+def olx(sleep: float = 3.0):
+    for domain, country, cur in (("olx.pl", "pl", "PLN"),):
+        for term in ("rtx 5090", "rtx pro 6000", "dgx spark"):
+            url = f"https://www.{domain}/elektronika/q-" + \
+                term.replace(" ", "-") + "/"
+            try:
+                body, rung = get(url)
+            except FetchError:
+                continue
+            seen = set()
+            for m in re.finditer(
+                    r'"name":"((?:[^"\\]|\\.){8,160})","price":([\d.]{3,12}),'
+                    r'"url":"(https://www\.olx\.pl/d/oferta/[^"]+-ID(\w+)\.html)"',
+                    body):
+                title, price, adurl, oid = m.groups()
+                if oid in seen:
+                    continue
+                seen.add(oid)
+                try:
+                    p = float(price)
+                except ValueError:
+                    continue
+                if p < 100:
+                    continue
+                yield Candidate(source="olx", ext_id=oid,
+                                url=adurl,
+                                title=json.loads('"' + title + '"'),
+                                price=p, currency=cur, country=country,
+                                condition="used", evidence=rung,
+                                meta={"term": term})
+            time.sleep(sleep)
 
 
 # ---------------------------------------------------------------- SearXNG:
