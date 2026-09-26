@@ -21,6 +21,16 @@ the next crawl uses the official API instead of scraping), a SearXNG
 discovery loop that loads every unknown domain a catalog-term query finds,
 and curated retail pages (Tenstorrent, ComputaHardware).
 
+No-API scrapers: Kleinanzeigen, AliExpress product search, IndiaMart,
+Craigslist (static pages, 15 cities), Marktplaats (state JSON), OLX.pl
+(state JSON), Kijiji (item pages SSR with ld+json offers, found via the
+search index - search pages are bot-walled), Amazon (browser rung; direct
+gets a 200 soft-block). Fake listings get cut by per-model floors_usd in
+the catalog; accessory titles ("$240 RTX 5090 water block") are dropped.
+
+Known challenge walls, queued for the escalation ladder: B&H, Geizhals,
+Newegg, Leboncoin, Subito, Carousell, Mercari, Yahoo Auctions JP, Gumtree.
+
 API-gated sources (silent until keys exist): eBay Browse API reads
 ~/.config/fp4sweep/ebay.json `{"app_id": "...", "cert_id": "..."}`;
 AliExpress affiliate search reads ~/.config/fp4sweep/aliexpress.json
