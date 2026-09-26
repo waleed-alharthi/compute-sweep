@@ -264,6 +264,97 @@ def aliexpress(sleep: float = 1.0):
         time.sleep(sleep)
 
 
+# ------------------------------------------------ scrapers without any API
+
+def kleinanzeigen(sleep: float = 3.0):
+    """German classifieds: every card is server-rendered with its own
+    ld+json block; price sits next to it in German number format."""
+    for term in ("rtx 5090", "rtx pro 6000", "dgx spark", "tenstorrent"):
+        url = ("https://www.kleinanzeigen.de/s-ecommerce/pc-zubehoer/k0?"
+               + urlencode({"keywords": term}))
+        try:
+            body, rung = get(url)
+        except FetchError:
+            continue
+        for blk in re.split(r"<article", body)[1:]:
+            adid = re.search(r'data-adid="(\d+)"', blk)
+            href = re.search(r'data-href="([^"]+)"', blk)
+            tm = re.search(r'"title":"((?:[^"\\]|\\.)*)"', blk)
+            pm = re.search(r'([\d][\d.,]{1,12})\s*€', blk)
+            if not (adid and href and tm and pm):
+                continue
+            pp = parse_price(pm.group(0), "EUR")
+            if not pp or pp[0] < 100:
+                continue
+            yield Candidate(
+                source="kleinanzeigen", ext_id=adid.group(1),
+                url="https://www.kleinanzeigen.de" + href.group(1),
+                title=html.unescape(tm.group(1).encode().decode(
+                    "unicode_escape", "replace")),
+                price=pp[0], currency=pp[1], country="de",
+                evidence=rung, meta={"term": term})
+        time.sleep(sleep)
+
+
+def aliexpress_scrape():
+    """Wholesale search pages embed the product list as JSON. Runs even once
+    the affiliate API is live: same source+product id, so the store dedupes
+    and the later (API) upsert wins the evidence field."""
+    page = 1
+    for term in AE_TERMS:
+        try:
+            body, rung = get(
+                f"https://www.aliexpress.com/w/wholesale-{term.replace(' ', '-')}.html")
+        except FetchError:
+            continue
+        seen = set()
+        for m in re.finditer(r'"productId":"(\d+)"(.{0,4000}?)"formattedPrice":"([^"]+)"',
+                             body, re.S):
+            pid, blob, fmt = m.group(1), m.group(2), m.group(3)
+            if pid in seen:
+                continue
+            seen.add(pid)
+            pp = parse_price(html.unescape(fmt), "USD")
+            tm = re.search(r'"displayTitle":"((?:[^"\\]|\\.)*)"', blob)
+            if not pp or pp[0] < 100:
+                continue
+            title = tm.group(1).encode().decode("unicode_escape", "replace") \
+                if tm else term
+            yield Candidate(source="aliexpress", ext_id=pid,
+                            url=f"https://www.aliexpress.com/item/{pid}.html",
+                            title=html.unescape(title),
+                            price=pp[0], currency=pp[1], country="cn",
+                            condition="new", evidence="scrape-" + rung,
+                            meta={"term": term})
+        time.sleep(1.5)
+
+
+def indiamart(sleep: float = 3.0):
+    for term in ("rtx 5090", "rtx pro 6000", "dgx spark"):
+        url = ("https://dir.indiamart.com/search.mp?"
+               + urlencode({"ss": term}))
+        try:
+            body, rung = get(url)
+        except FetchError:
+            continue
+        for blk in re.split(r'href="/products/\?id=', body)[1:]:
+            pid = re.match(r"(\d+)", blk)
+            t = re.search(r">([^<]{15,120})</a>", blk[:4000])
+            pm = re.search(r"₹(?:<!-- -->\s*)*([\d][\d,]{2,12})", blk[:4000])
+            if not (pid and t and pm):
+                continue
+            pp = parse_price("INR " + pm.group(1).replace(",", ""), "INR")
+            if not pp or pp[0] < 20000:
+                continue
+            yield Candidate(source="indiamart", ext_id=pid.group(1),
+                            url="https://dir.indiamart.com/products/?id="
+                                + pid.group(1),
+                            title=html.unescape(t.group(1)).strip(),
+                            price=pp[0], currency="INR", country="in",
+                            condition="new", evidence=rung, meta={"term": term})
+        time.sleep(sleep)
+
+
 # ---------------------------------------------------------------- SearXNG:
 # dubizzle (Imperva-walled, priced URL slugs) + the dark-alley discovery loop
 

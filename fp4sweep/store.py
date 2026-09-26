@@ -53,7 +53,8 @@ _WORD_COUNTS = {"dual": 2, "twin": 2, "triple": 3, "quad": 4}
 # buyer's ads masquerading as listings: the number on them is an ask, not
 # something you can pay
 WANTED_RE = re.compile(
-    r"\b(wanted|wanting|looking for|seeking|hunting)\b|"
+    r"\b(wanted|wanting|looking for|seeking|hunting|ankauf)\b|"
+    r"\bwir kaufen\b|^\s*suche\b|"
     r"مطلوب|أبحث|ابحث|نبحث|نريد|اريده", re.I)
 
 
@@ -122,6 +123,11 @@ class Store:
         per_gb = round(usd / vram, 2) if usd and matched else None
         if per_gb is not None and per_gb > 5000:
             # nothing real is $5k/GB; that's a mis-parsed currency
+            matched = 0
+            per_gb = None
+        if matched and usd and entry and entry.get("floor_usd") \
+                and usd < entry["floor_usd"]:
+            # below the floor it is a fake listing or a parts/scrap price
             matched = 0
             per_gb = None
         self.db.execute("""

@@ -5,12 +5,14 @@
   name: RTX 5090
   vram: 32
   fp4: native
+  floor_usd: 1100
   patterns:
     - "rtx\\s*(?:pro\\s*)?5090"
 - id: rtxpro6000bw
   name: RTX PRO 6000 Blackwell
   vram: 96
   fp4: native
+  floor_usd: 3800
   patterns:
     - "rtx\\s*pro\\s*6?000"
     - "rtx\\s*6?000\\s*(?:pro)?.{0,12}blackwell"
@@ -21,6 +23,7 @@
   name: RTX PRO 5000 Blackwell
   vram: 48
   fp4: native
+  floor_usd: 2300
   patterns:
     - "rtx\\s*pro\\s*5000"
     - "rtx\\s*5000\\s*(?:blackwell|96|72|48)"
@@ -30,12 +33,14 @@
   name: RTX PRO 4500 Blackwell
   vram: 32
   fp4: native
+  floor_usd: 1500
   patterns:
     - "rtx\\s*pro\\s*4500"
 - id: dgxspark
   name: DGX Spark / GB10 box
   vram: 128
   fp4: native
+  floor_usd: 2300
   patterns:
     - "dgx\\s*spark"
     - "ascent\\s*gx10"
@@ -45,18 +50,21 @@
   name: Jetson AGX Thor
   vram: 128
   fp4: native
+  floor_usd: 1400
   patterns:
     - "jetson\\s*(?:agx)?\\s*thor"
 - id: quietbox2
   name: Tenstorrent QuietBox 2
   vram: 128
   fp4: native
+  floor_usd: 4000
   patterns:
     - "quietbox\\s*2"
 - id: tenstorrent
   name: Tenstorrent card
   vram: 32
   fp4: native
+  floor_usd: 250
   patterns:
     - "tenstorrent"
     - "\\b(?:p150|p100|n300|n150|wormhole|blackhole)\\b"
@@ -69,6 +77,7 @@
   name: Huawei Atlas 350
   vram: 112
   fp4: native
+  floor_usd: 2500
   patterns:
     - "atlas\\s*350"
     - "ascend\\s*950"
@@ -76,6 +85,7 @@
   name: Mac Studio (Apple silicon)
   vram: 96
   fp4: sw
+  floor_usd: 1700
   patterns:
     - "mac\\s*studio"
     - "mac\\s*pro\\b"
@@ -89,6 +99,7 @@
   name: MacBook Pro 16 (Apple silicon)
   vram: 128
   fp4: sw
+  floor_usd: 2000
   patterns:
     - "macbook\\s*pro"
   vram_overrides:
