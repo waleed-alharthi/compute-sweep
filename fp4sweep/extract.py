@@ -121,23 +121,21 @@ def extract_page(page: str, base_url: str, source: str | None = None,
                 stock="in_stock" if "InStock" in availability else "",
                 region=str(item.get("availableRegion") or item.get("region") or ""))
 
-    if not out:  # meta-tag fallback
+    if not out:  # meta-tag fallback, structured only: a price with no
+                   # anywhere-said-so currency is not a price we can rank
         metas = {m.group(1).lower(): m.group(2) for m in META_RE.finditer(page)}
         title = metas.get("og:title") or metas.get("twitter:title")
+        cur = (metas.get("product:price:currency")
+               or metas.get("og:price:currency") or "").upper() or None
         price = None
-        cur = None
         for k in ("product:price:amount", "og:price:amount", "price"):
             if metas.get(k):
-                price, cur = parse_price(metas[k], default_currency)
-                if price:
+                pp = parse_price(metas[k], cur)
+                if pp:
+                    price, cur = pp
                     break
-        if price is None and title:
-            pp = re.search(r"(?:USD|EUR|OMR|SAR|AED|KWD|BHD|QAR|\$\s?)\s?[\d][\d.,\s]{1,12}",
-                           htmllib.unescape(metas.get("og:description") or ""))
-            if pp:
-                price, cur = parse_price(pp.group(0), default_currency)
         if title and price is not None:
-            add(base_url, title, price, cur or metas.get("product:price:currency", "").upper())
+            add(base_url, title, price, cur)
 
     if not out:
         _card_scan(page, base_url, source, evidence, default_currency, country, out)

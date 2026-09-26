@@ -107,19 +107,49 @@ def opensooq(pages: int = 2, sleep: float = 1.2):
 
 # ---------------------------------------------------------------- Haraj
 
-HARAJ_TERMS = ("5090", "rtx pro 6000", "dgx spark", "rtx 6000", "atlas 350",
-               "quietbox", "4090 48gb")
+HARAJ_TERMS = ("haraj rtx 5090", "haraj rtx pro 6000", "haraj dgx spark",
+               "haraj rtx 6000", "haraj tenstorrent")
 
 
-def haraj(sleep: float = 4.0):
+def haraj(sleep: float = 3.0):
+    """Haraj's own search is a JS app with no shareable results URL, so the
+    item URLs come from the search index and each item page is rendered.
+    A price counts only when the page or the snippet states it with a
+    currency marker; unsnared "placeholder price" ads stay out."""
+    money = re.compile(
+        r"([\d][\d,.]{1,12})\s*(?:ريال|ر\.?\s?س|SAR)|"
+        r"(?:ريال|ر\.?\s?س|SAR)\s*[:=]?\s*([\d][\d,.]{1,12})", re.I)
+    deleted = re.compile(r"العرض محذوف|قديم|محذوف", re.I)
+    seen: set[str] = set()
     for term in HARAJ_TERMS:
-        url = "https://haraj.com.sa/search?" + urlencode({"keywords": term})
-        try:
-            body, rung = get(url)  # direct will 403; the ladder lands on browserless
-        except FetchError:
-            continue
-        yield from extract_page(body, url, source="haraj", evidence=rung,
-                                country="sa", default_currency="SAR")
+        for r in _searxng(term):
+            url = r.get("url") or ""
+            m = re.match(r"https://haraj\.com\.sa/(1\d{9})/", url)
+            if not m or m.group(1) in seen:
+                continue
+            snippet = html.unescape((r.get("title") or "") + " " + (r.get("content") or ""))
+            if deleted.search(snippet):  # the index says the ad is gone
+                continue
+            seen.add(m.group(1))
+            title = (r.get("title") or "").strip()
+            try:
+                body, rung = get(url)
+                tm = re.search(r'"@type":"Thing","name":"([^"]+)"', body)
+                if tm:
+                    title = tm.group(1)
+            except FetchError:
+                body, rung = "", "serp"
+            pm = money.search(body or "") or money.search(snippet)
+            amount = None
+            if pm:
+                pp = parse_price(pm.group(0), "SAR")
+                if pp and pp[0] >= 100:
+                    amount = pp
+            if amount:
+                yield Candidate(source="haraj", ext_id=m.group(1), url=url,
+                                title=title or url, price=amount[0],
+                                currency=amount[1], country="sa",
+                                evidence=rung, meta={"term": term})
         time.sleep(sleep)
 
 # ---------------------------------------------------------------- eBay

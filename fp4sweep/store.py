@@ -120,6 +120,10 @@ class Store:
         if old and usd is None:
             usd = prev_usd  # a re-sighted listing keeps its known conversion
         per_gb = round(usd / vram, 2) if usd and matched else None
+        if per_gb is not None and per_gb > 5000:
+            # nothing real is $5k/GB; that's a mis-parsed currency
+            matched = 0
+            per_gb = None
         self.db.execute("""
           INSERT INTO listings(key,source,ext_id,url,title,price,currency,usd,prev_usd,
             region,country,condition,stock,evidence,catalog_id,product,vram,fp4,
