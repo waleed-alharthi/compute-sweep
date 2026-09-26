@@ -62,6 +62,7 @@
     - "quietbox\\s*2"
 - id: tenstorrent
   name: Tenstorrent card
+  reject: ["tesla", "v100", "p40", "m40", "k80", "quadro"]
   vram: 32
   fp4: native
   floor_usd: 250

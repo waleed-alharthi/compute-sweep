@@ -84,6 +84,8 @@ def match_catalog(title: str, catalog) -> tuple[dict, int] | tuple[None, None]:
     and by the GPU count of multi-card workstations."""
     t = title.lower()
     for entry in catalog:
+        if any(re.search(r, t) for r in entry.get("reject") or ()):
+            continue  # e.g. "Tesla P100" is not a Tenstorrent p100
         for pat in entry["patterns"]:
             if re.search(pat, t):
                 vram = entry.get("vram", 0)

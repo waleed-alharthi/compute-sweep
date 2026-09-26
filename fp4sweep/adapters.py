@@ -266,6 +266,13 @@ def aliexpress(sleep: float = 1.0):
 
 # ------------------------------------------------ scrapers without any API
 
+def _unesc(s: str) -> str:
+    """Decode a JSON string body properly: unicode_escape mangles non-ASCII."""
+    try:
+        return json.loads('"' + s + '"')
+    except Exception:
+        return s
+
 def kleinanzeigen(sleep: float = 3.0):
     """German classifieds: every card is server-rendered with its own
     ld+json block; price sits next to it in German number format."""
@@ -289,8 +296,7 @@ def kleinanzeigen(sleep: float = 3.0):
             yield Candidate(
                 source="kleinanzeigen", ext_id=adid.group(1),
                 url="https://www.kleinanzeigen.de" + href.group(1),
-                title=html.unescape(tm.group(1).encode().decode(
-                    "unicode_escape", "replace")),
+                title=_unesc(tm.group(1)),
                 price=pp[0], currency=pp[1], country="de",
                 evidence=rung, meta={"term": term})
         time.sleep(sleep)
@@ -318,8 +324,7 @@ def aliexpress_scrape():
             tm = re.search(r'"displayTitle":"((?:[^"\\]|\\.)*)"', blob)
             if not pp or pp[0] < 100:
                 continue
-            title = tm.group(1).encode().decode("unicode_escape", "replace") \
-                if tm else term
+            title = _unesc(tm.group(1)) if tm else term
             yield Candidate(source="aliexpress", ext_id=pid,
                             url=f"https://www.aliexpress.com/item/{pid}.html",
                             title=html.unescape(title),
