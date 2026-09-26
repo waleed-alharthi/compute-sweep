@@ -30,6 +30,11 @@ AliExpress affiliate search reads ~/.config/fp4sweep/aliexpress.json
 Evidence levels travel with every row: `direct`, `browser`, `serp` - a
 snippet-price is never presented as a page-price.
 
+Pending: eBay developer account and AliExpress app are both under review
+(registered 2026-09-26 by Waleed). These official APIs are also the intended
+data backbone for the interactive "researcher" tool - when keys land, keep
+them in the credential files above so both crawls and researcher use them.
+
 Deploy (kaiju, user units):
     cp systemd/fp4sweep.{service,timer} ~/.config/systemd/user/
     systemctl --user daemon-reload && systemctl --user enable --now fp4sweep.timer
