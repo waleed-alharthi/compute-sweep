@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly fp4sweep market crawl
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=1h
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

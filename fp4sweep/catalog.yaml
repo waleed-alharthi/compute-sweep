@@ -1,0 +1,96 @@
+# FP4 hardware catalog: every chip/box with an FP4 path and >= 24 GB of
+# VRAM/unified memory. fp4: native | sw. vram in GB. patterns are regexes
+# (case-insensitive) matched against listing titles, first match wins.
+- id: rtx5090
+  name: RTX 5090
+  vram: 32
+  fp4: native
+  patterns:
+    - "rtx\\s*(?:pro\\s*)?5090"
+- id: rtxpro6000bw
+  name: RTX PRO 6000 Blackwell
+  vram: 96
+  fp4: native
+  patterns:
+    - "rtx\\s*pro\\s*6?000"
+    - "rtx\\s*6?000\\s*(?:pro)?.{0,12}blackwell"
+    - "blackwell.{0,12}96\\s*gb"
+  vram_overrides:
+    - ["max-?q", 96]
+- id: rtxpro5000bw
+  name: RTX PRO 5000 Blackwell
+  vram: 48
+  fp4: native
+  patterns:
+    - "rtx\\s*pro\\s*5000"
+    - "rtx\\s*5000\\s*(?:blackwell|96|72|48)"
+  vram_overrides:
+    - ["72\\s*gb", 72]
+- id: rtxpro4500bw
+  name: RTX PRO 4500 Blackwell
+  vram: 32
+  fp4: native
+  patterns:
+    - "rtx\\s*pro\\s*4500"
+- id: dgxspark
+  name: DGX Spark / GB10 box
+  vram: 128
+  fp4: native
+  patterns:
+    - "dgx\\s*spark"
+    - "ascent\\s*gx10"
+    - "\\bgx10\\b"
+    - "\\bgb10\\b"
+- id: jetsonthor
+  name: Jetson AGX Thor
+  vram: 128
+  fp4: native
+  patterns:
+    - "jetson\\s*(?:agx)?\\s*thor"
+- id: quietbox2
+  name: Tenstorrent QuietBox 2
+  vram: 128
+  fp4: native
+  patterns:
+    - "quietbox\\s*2"
+- id: tenstorrent
+  name: Tenstorrent card
+  vram: 32
+  fp4: native
+  patterns:
+    - "tenstorrent"
+    - "\\b(?:p150|p100|n300|n150|wormhole|blackhole)\\b"
+  vram_overrides:
+    - ["p150", 32]
+    - ["p100", 28]
+    - ["n300", 24]
+    - ["n150", 12]
+- id: atlas350
+  name: Huawei Atlas 350
+  vram: 112
+  fp4: native
+  patterns:
+    - "atlas\\s*350"
+    - "ascend\\s*950"
+- id: macstudio
+  name: Mac Studio (Apple silicon)
+  vram: 96
+  fp4: sw
+  patterns:
+    - "mac\\s*studio"
+    - "mac\\s*pro\\b"
+  vram_overrides:
+    - ["512\\s*g(?:b)?", 512]
+    - ["256\\s*g(?:b)?", 256]
+    - ["192\\s*g(?:b)?", 192]
+    - ["128\\s*g(?:b)?", 128]
+    - ["96\\s*g(?:b)?", 96]
+- id: macbook
+  name: MacBook Pro 16 (Apple silicon)
+  vram: 128
+  fp4: sw
+  patterns:
+    - "macbook\\s*pro"
+  vram_overrides:
+    - ["192\\s*g(?:b)?", 192]
+    - ["128\\s*g(?:b)?", 128]

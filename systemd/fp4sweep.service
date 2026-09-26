@@ -1,0 +1,8 @@
+[Unit]
+Description=fp4sweep: crawl the markets for FP4 hardware value
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/fp4sweep
+ExecStart=/usr/bin/python3 -m fp4sweep.run crawl
