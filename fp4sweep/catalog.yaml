@@ -341,8 +341,11 @@
   name: Huawei Atlas 300I Duo 96GB
   vram: 96
   fp: fp16
-  bw: 408
+  bw: 204
   floor_usd: 1000
+  note: 2x Ascend 310P, 96GB LPDDR4X total; the two chips' 204 GB/s do NOT
+    stack for LLM inference; INT8-capable NPUs but runs GGUF via llama.cpp
+    CANN backend; needs CANN/torch-npu, passive card (server airflow)
   patterns:
     - "atlas\\s*300i?\\s*duo"
     - "300i\\s*duo"
