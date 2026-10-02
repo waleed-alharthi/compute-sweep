@@ -131,7 +131,7 @@ def export(db):
         },
         "news": [_row(r, now) for r in news[:20]],
         "drops": [dict(_row(r, now), drop_pct=pct) for r, pct in drops[:10]],
-        "best": [_row(r, now) for r in active[:20]],
+        "best": [_row(r, now) for r in active[:30]],
         "street": street,
         "unknown": [{"title": r["title"][:80], "src": r["source"],
                      "usd": r["usd"], "url": r["url"]} for r in unknown[:20]],
