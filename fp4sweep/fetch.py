@@ -38,6 +38,38 @@ def _browserless(url: str, timeout_ms: int = 25000) -> str:
         return resp.read().decode("utf-8", "replace")
 
 
+STEALTH = "stealth"
+_camo = None
+
+
+def stealth(url: str, settle_ms: int = 6000) -> str:
+    """Camoufox (patched Firefox, virtual display): the rung for sites that
+    wall both plain HTTP and headless Chrome (DHgate, Alibaba, noon, CEX).
+    One browser per crawl, started on first use; close_stealth() ends it."""
+    global _camo
+    if _camo is None:
+        from camoufox.sync_api import Camoufox
+        cm = Camoufox(headless="virtual", humanize=True, os="windows",
+                      locale="en-US")
+        _camo = (cm, cm.__enter__())
+    page = _camo[1].new_page()
+    try:
+        page.goto(url, timeout=45000, wait_until="domcontentloaded")
+        page.wait_for_timeout(settle_ms)
+        return page.content()
+    finally:
+        page.close()
+
+
+def close_stealth() -> None:
+    global _camo
+    if _camo is not None:
+        try:
+            _camo[0].__exit__(None, None, None)
+        finally:
+            _camo = None
+
+
 def get(url: str, allow_browser: bool = True,
         headers: dict | None = None) -> tuple[str, str]:
     """Return (body, rung). Raises FetchError when no rung answered."""

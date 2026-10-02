@@ -31,7 +31,15 @@ CREATE TABLE IF NOT EXISTS fx(
 );
 CREATE INDEX IF NOT EXISTS ix_seen ON listings(last_seen);
 CREATE INDEX IF NOT EXISTS ix_first ON listings(first_seen);
+CREATE TABLE IF NOT EXISTS verdicts(
+  key TEXT PRIMARY KEY, title TEXT, ok INTEGER, units INTEGER,
+  vram_total INTEGER, reason TEXT, model TEXT, ts REAL
+);
 """
+
+# columns added by the 2026-10 overhaul; ALTERed onto older databases
+_NEW_COLS = (("ship", "TEXT"), ("landed_usd", "REAL"), ("landed_per_gb", "REAL"),
+             ("units", "INTEGER"), ("verdict", "TEXT"), ("needs", "TEXT"))
 
 _CATALOG_PATH = Path(__file__).parent / "catalog.yaml"
 
@@ -41,6 +49,11 @@ def connect(path=DB_PATH) -> sqlite3.Connection:
     db = sqlite3.connect(path)
     db.row_factory = sqlite3.Row
     db.executescript(_SCHEMA)
+    have = {r[1] for r in db.execute("PRAGMA table_info(listings)")}
+    for col, typ in _NEW_COLS:
+        if col not in have:
+            db.execute(f"ALTER TABLE listings ADD COLUMN {col} {typ}")
+    db.commit()
     return db
 
 
@@ -69,6 +82,40 @@ ACCESSORY_RE = re.compile(
 ARTICLE_RE = re.compile(
     r"\?$|^(who|what|why|how|can you|should you|is the|are the)\b|"
     r"\bfaq\b|\bvs\.?\s|\balternatives?\b|^best\s|^top\s+\d|compar(?:e|ison|ed)", re.I)
+
+
+# How a listing reaches Oman, and what that adds. A fixed courier/freight
+# allowance plus duty+VAT as a fraction of the goods. Deliberately
+# conservative: a cheap card that needs a forwarder must beat a local one
+# after the forwarder, or it is not cheap.
+#   om     seller is in Oman (meet / local courier)
+#   gcc    GCC seller: courier + 5% VAT at the border
+#   intl   seller ships internationally (AliExpress, DHgate, Alibaba, eBay GSP)
+#   fwd    domestic-only seller abroad -> parcel forwarder to Muscat
+#   proxy  Japanese auctions through a proxy buyer (Buyee/ZenMarket)
+SHIP_COST = {"om": (0, 0.0), "gcc": (40, 0.05), "intl": (80, 0.10),
+             "fwd": (160, 0.10), "proxy": (140, 0.10)}
+GCC = {"sa", "ae", "kw", "bh", "qa"}
+
+
+def ship_class(source: str, country: str, meta: dict) -> str:
+    if meta.get("ship"):
+        return meta["ship"]
+    c = (country or "").lower()
+    if c == "om":
+        return "om"
+    if c in GCC:
+        return "gcc"
+    if source in ("aliexpress", "dhgate", "alibaba", "ebay", "amazon", "tenstorrent"):
+        return "intl"
+    if source in ("yahoojp",):
+        return "proxy"
+    return "fwd"
+
+
+def landed(usd: float, ship: str) -> float:
+    fixed, duty = SHIP_COST.get(ship, SHIP_COST["fwd"])
+    return round(usd * (1 + duty) + fixed, 2)
 
 
 def gpu_count(title: str) -> int:
@@ -118,8 +165,12 @@ class Store:
             return
         key = f"{c.source}:{c.ext_id}"
         old = self.db.execute(
-            "SELECT usd, hits, last_price_change, currency FROM listings WHERE key=?",
-            (key,)).fetchone()
+            "SELECT usd, hits, last_price_change, currency, title, verdict, "
+            "vram, units FROM listings WHERE key=?", (key,)).fetchone()
+        gated = old is not None and old["verdict"] == "yes" \
+            and old["title"] == c.title and old["vram"]
+        if gated:  # the legitimacy gate read this exact title: keep its VRAM
+            vram = old["vram"]
         now = time.time()
         usd = None
         if c.price and c.currency:
@@ -139,21 +190,25 @@ class Store:
             change = now
         if old and usd is None:
             usd = prev_usd  # a re-sighted listing keeps its known conversion
+        units = (old["units"] if gated else gpu_count(c.title)) if matched else None
+        ship = ship_class(c.source, c.country, c.meta)
+        land = landed(usd, ship) if usd else None
         per_gb = round(usd / vram, 2) if usd and matched else None
         if per_gb is not None and per_gb > 5000:
             # nothing real is $5k/GB; that's a mis-parsed currency
             matched = 0
             per_gb = None
         if matched and usd and entry and entry.get("floor_usd") \
-                and usd < entry["floor_usd"]:
+                and usd / (units or 1) < entry["floor_usd"]:
             # below the floor it is a fake listing or a parts/scrap price
             matched = 0
             per_gb = None
         self.db.execute("""
           INSERT INTO listings(key,source,ext_id,url,title,price,currency,usd,prev_usd,
             region,country,condition,stock,evidence,catalog_id,product,vram,fp4,
-            usd_per_gb,matched,first_seen,last_seen,last_price_change,hits,raw)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            usd_per_gb,matched,first_seen,last_seen,last_price_change,hits,raw,
+            ship,landed_usd,landed_per_gb,units)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(key) DO UPDATE SET
             title=excluded.title, price=excluded.price, currency=excluded.currency,
             usd=excluded.usd, prev_usd=excluded.prev_usd, condition=excluded.condition,
@@ -162,14 +217,19 @@ class Store:
             vram=excluded.vram, fp4=excluded.fp4, matched=excluded.matched,
             usd_per_gb=excluded.usd_per_gb,
             last_seen=excluded.last_seen, last_price_change=excluded.last_price_change,
-            hits=hits+1, raw=excluded.raw
+            hits=hits+1, raw=excluded.raw, ship=excluded.ship,
+            landed_usd=excluded.landed_usd, landed_per_gb=excluded.landed_per_gb,
+            units=excluded.units,
+            verdict=CASE WHEN listings.title=excluded.title THEN listings.verdict END
         """, (key, c.source, c.ext_id, c.url, c.title, c.price, c.currency, usd,
               prev_usd, c.region, c.country, c.condition, c.stock, c.evidence,
               entry["id"] if matched else (entry["id"] if entry else None),
               entry["name"] if matched else None, vram if matched else None,
-              entry["fp4"] if matched else None, per_gb, 1 if matched else 0,
+              entry["fp"] if matched else None, per_gb, 1 if matched else 0,
               now, now, change, (old["hits"] + 1) if old else 1,
-              json.dumps(c.meta, ensure_ascii=False)))
+              json.dumps(c.meta, ensure_ascii=False),
+              ship, land, round(land / vram, 2) if land and matched else None,
+              units))
         self.db.commit()
 
     def to_usd(self, amount: float, cur: str) -> float | None:
@@ -181,11 +241,41 @@ class Store:
 
     # ---- views for the export ----
 
-    def active(self, days: float = 14.0) -> list[sqlite3.Row]:
-        cut = time.time() - days * 86400
+    def active(self, hours: float = 72.0) -> list[sqlite3.Row]:
+        """Buyable now: matched, seen by a sweep in the last 72h, not
+        rejected by the legitimacy gate, ranked by landed $/GB in Oman."""
+        cut = time.time() - hours * 3600
         return self.db.execute(
             "SELECT * FROM listings WHERE matched=1 AND last_seen>? "
-            "ORDER BY usd_per_gb ASC", (cut,)).fetchall()
+            "AND landed_per_gb IS NOT NULL AND COALESCE(verdict,'') != 'no' "
+            "AND COALESCE(needs,'') != 'sxm' "
+            "ORDER BY landed_per_gb ASC", (cut,)).fetchall()
+
+    def pending_verdicts(self, limit: int = 60) -> list[sqlite3.Row]:
+        return self.db.execute(
+            "SELECT key, title, url, source, price, currency, usd, vram "
+            "FROM listings WHERE matched=1 AND verdict IS NULL "
+            "AND last_seen>? ORDER BY landed_per_gb ASC LIMIT ?",
+            (time.time() - 72 * 3600, limit)).fetchall()
+
+    def set_verdict(self, key: str, ok: bool, units: int | None,
+                    vram_total: int | None, reason: str, model: str,
+                    needs: str = "") -> None:
+        self.db.execute(
+            "INSERT OR REPLACE INTO verdicts VALUES(?,?,?,?,?,?,?,?)",
+            (key, None, int(ok), units, vram_total, reason, model, time.time()))
+        if ok and vram_total and vram_total < MIN_VRAM:
+            ok = False  # the gate read the title: it is a 16GB variant
+        if ok and vram_total:
+            # the gate read the title properly: trust its VRAM over the regex
+            self.db.execute(
+                "UPDATE listings SET verdict='yes', vram=?, units=?, needs=?, "
+                "usd_per_gb=ROUND(usd/?,2), landed_per_gb=ROUND(landed_usd/?,2) "
+                "WHERE key=?", (vram_total, units, needs, vram_total, vram_total, key))
+        else:
+            self.db.execute("UPDATE listings SET verdict=?, needs=? WHERE key=?",
+                            ("yes" if ok else "no", needs, key))
+        self.db.commit()
 
     def news(self, hours: float = 48.0) -> list[sqlite3.Row]:
         cut = time.time() - hours * 3600

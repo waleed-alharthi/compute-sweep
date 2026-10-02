@@ -647,3 +647,135 @@ def retail():
             continue
         yield from extract_page(body, url, source=source, evidence=rung)
         time.sleep(1.0)
+
+
+# ================================================== 2026-10 overhaul sources
+# Search terms per family: the cheap-VRAM odd hardware is the point, the
+# mainstream cards are the yardstick. One list drives every search adapter.
+FAMILY_TERMS = (
+    "rtx 5090", "rtx pro 6000 blackwell", "rtx pro 5000 blackwell",
+    "dgx spark", "ascent gx10", "jetson agx thor",
+    "rtx 4090 48gb", "rtx 4090", "rtx 3090", "rtx a6000", "rtx 6000 ada",
+    "l40s", "a100 80gb", "quadro rtx 8000", "tesla v100 32gb", "tesla p40",
+    "mi50 32gb", "mi100", "mi210", "radeon pro w7900", "7900 xtx",
+    "ai max 395 128gb", "gaudi2", "arc pro b60", "atlas 300i duo",
+    "mac studio 192gb", "mac studio 512gb", "agx orin 64gb",
+)
+
+
+def _dhgate_items(body: str):
+    """DHgate search pages embed the product list as JSON objects."""
+    for m in re.finditer(
+            r'\{"itemcode":"(\d+)".{0,1500}?"productname":"((?:[^"\\]|\\.)*)"'
+            r'.{0,600}?"productDetailUrl":"([^"]+)"', body, re.S):
+        code, name, url = m.groups()
+        tail = body[m.end():m.end() + 6000]
+        pm = re.search(r'"price":"US \$([\d,.]+)', tail)
+        if not pm:
+            continue
+        yield code, _unesc(name), url, float(pm.group(1).replace(",", ""))
+
+
+def dhgate(sleep: float = 2.0):
+    from .fetch import stealth
+    for term in FAMILY_TERMS:
+        url = ("https://www.dhgate.com/wholesale/search.do?"
+               + urlencode({"searchkey": term}))
+        try:
+            body = stealth(url)
+        except Exception as exc:
+            print(f"  [dhgate] {term!r}: {str(exc)[:80]}", flush=True)
+            continue
+        seen = set()
+        for code, name, link, price in _dhgate_items(body):
+            if code in seen or price < 50:
+                continue
+            seen.add(code)
+            # "US $560.81 - 719.08": the low end is the 1-piece price tier
+            yield Candidate(source="dhgate", ext_id=code, url=link, title=name,
+                            price=price, currency="USD", country="cn",
+                            condition="", evidence="stealth",
+                            meta={"term": term, "ship": "intl"})
+        time.sleep(sleep)
+
+
+def alibaba(sleep: float = 1.5, pages: int = 2):
+    """Alibaba's gallery JSON service: plain HTTP, no browser, no slider
+    captcha (the HTML search earns one after two queries). Prices are USD
+    ranges; the HIGH end is the single-unit tier. Offers needing more than
+    2 units, or from suppliers under 2 years, are skipped - those are
+    wholesale bait, not a card Waleed can order."""
+    for term in FAMILY_TERMS:
+        for page in range(1, pages + 1):
+            url = ("https://open-s.alibaba.com/openservice/"
+                   "galleryProductOfferResultViewService?"
+                   + urlencode({"searchweb": "Y", "SearchText": term,
+                                "page": page}))
+            try:
+                body, rung = get(url, allow_browser=False)
+                offers = json.loads(body)["data"]["offerList"]
+            except Exception as exc:
+                print(f"  [alibaba] {term!r}: {str(exc)[:80]}", flush=True)
+                break
+            for o in offers:
+                info, tp, sup = o.get("information") or {}, \
+                    o.get("tradePrice") or {}, o.get("supplier") or {}
+                prices = re.findall(r"[\d,]+(?:\.\d+)?",
+                                    (tp.get("price") or "").replace(",", ""))
+                moq = re.match(r"(\d+)", tp.get("minOrder") or "1")
+                if not prices or (moq and int(moq.group(1)) > 2):
+                    continue
+                try:
+                    years = int(sup.get("supplierYear") or 0)
+                except ValueError:
+                    years = 0
+                if years < 2:
+                    continue
+                pid = str(info.get("id") or o.get("id") or "")
+                title = html.unescape(info.get("puretitle") or
+                                      re.sub(r"<[^>]+>", "", info.get("title") or ""))
+                yield Candidate(
+                    source="alibaba", ext_id=pid,
+                    url="https:" + (info.get("productUrl") or "").split("?")[0],
+                    title=title, price=float(prices[-1]), currency="USD",
+                    country="cn", evidence=rung,
+                    meta={"term": term, "ship": "intl",
+                          "moq": tp.get("minOrder"), "supplier_years": years,
+                          "gold": sup.get("goldSupplier") == "True"})
+            time.sleep(sleep)
+
+
+def yahoojp(sleep: float = 2.0):
+    """Yahoo! Auctions Japan: domestic-only sellers, bought through a proxy
+    (Buyee/ZenMarket) - which is why it is ranked with a proxy surcharge.
+    Uses the buy-now price when there is one, else the current bid, and
+    keeps only auctions with more than 12h left."""
+    now = time.time()
+    for term in FAMILY_TERMS:
+        url = ("https://auctions.yahoo.co.jp/search/search?"
+               + urlencode({"p": term, "va": term, "n": 50}))
+        try:
+            body, rung = get(url, allow_browser=False)
+        except FetchError:
+            continue
+        for blk in body.split('<div class="Product__bonus')[1:]:
+            aid = re.search(r'data-auction-id="(\w+)"', blk)
+            title = re.search(r'data-auction-title="([^"]+)"', blk)
+            price = re.search(r'data-auction-price="(\d+)"', blk)
+            bin_ = re.search(r'data-auction-buynowprice="(\d+)"', blk)
+            end = re.search(r'data-auction-endtime="(\d+)"', blk)
+            if not (aid and title and price):
+                continue
+            yen = int(bin_.group(1)) if bin_ and int(bin_.group(1)) > 0 \
+                else int(price.group(1))
+            if end and int(end.group(1)) - now < 12 * 3600 and not \
+                    (bin_ and int(bin_.group(1)) > 0):
+                continue  # a bid ending soon will close far above today's price
+            yield Candidate(source="yahoojp", ext_id=aid.group(1),
+                            url="https://auctions.yahoo.co.jp/jp/auction/" + aid.group(1),
+                            title=html.unescape(title.group(1)), price=yen,
+                            currency="JPY", country="jp",
+                            condition="used", evidence=rung,
+                            meta={"term": term, "ship": "proxy",
+                                  "bin": bool(bin_ and int(bin_.group(1)) > 0)})
+        time.sleep(sleep)

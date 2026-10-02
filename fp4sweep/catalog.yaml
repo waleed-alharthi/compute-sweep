@@ -1,114 +1,374 @@
-# FP4 hardware catalog: every chip/box with an FP4 path and >= 24 GB of
-# VRAM/unified memory. fp4: native | sw. vram in GB. patterns are regexes
-# (case-insensitive) matched against listing titles, first match wins.
-- id: rtx5090
-  name: RTX 5090
-  vram: 32
-  bw: 1792
-  fp4: native
-  floor_usd: 1100
-  patterns:
-    - "rtx\\s*(?:pro\\s*)?5090"
+# Every accelerator family with >= 24 GB of VRAM / unified memory, mainstream
+# and odd. First match wins, so specific patterns come before generic ones
+# (4090 48G mod before 4090, PRO 6000 before 6000 Ada before RTX 6000).
+#   vram   GB per unit (overrides by title); gpu_count multiplies for piles
+#   fp     lowest *hardware* float: fp4 | fp8 | fp16 | fp32 (sw = no tensor)
+#   bw     GB/s memory bandwidth, the number that sets tokens/s
+#   floor  street floor in USD per unit: below it the listing is a scam,
+#          a part, a rental or a typo - not a card you can buy
+#   reject title regexes that look like a match but are not
+
+# ---------------- NVIDIA Blackwell (native FP4)
 - id: rtxpro6000bw
   name: RTX PRO 6000 Blackwell
   vram: 96
+  fp: fp4
   bw: 1792
-  fp4: native
-  floor_usd: 3800
+  floor_usd: 5500
   patterns:
-    - "rtx\\s*pro\\s*6?000"
-    - "rtx\\s*6?000\\s*(?:pro)?.{0,12}blackwell"
-    - "blackwell.{0,12}96\\s*gb"
-  vram_overrides:
-    - ["max-?q", 96]
+    - "rtx\\s*pro\\s*6000"
+    - "rtx\\s*6000\\s*pro"
+    - "6000.{0,20}blackwell|blackwell.{0,20}6000"
 - id: rtxpro5000bw
   name: RTX PRO 5000 Blackwell
   vram: 48
+  fp: fp4
   bw: 1344
-  fp4: native
-  floor_usd: 2300
+  floor_usd: 3000
   patterns:
     - "rtx\\s*pro\\s*5000"
-    - "rtx\\s*5000\\s*(?:blackwell|96|72|48)"
+    - "5000.{0,20}blackwell"
   vram_overrides:
-    - ["72\\s*gb", 72]
+    - ["72\\s*g", 72]
 - id: rtxpro4500bw
   name: RTX PRO 4500 Blackwell
   vram: 32
-  bw: 864
-  fp4: native
-  floor_usd: 1500
+  fp: fp4
+  bw: 896
+  floor_usd: 1800
   patterns:
     - "rtx\\s*pro\\s*4500"
+- id: rtxpro4000bw
+  name: RTX PRO 4000 Blackwell
+  vram: 24
+  fp: fp4
+  bw: 672
+  floor_usd: 1100
+  patterns:
+    - "rtx\\s*pro\\s*4000"
+- id: rtx5090
+  name: RTX 5090
+  vram: 32
+  fp: fp4
+  bw: 1792
+  floor_usd: 1900
+  reject: ["laptop", "notebook", "mobile", "5090\\s*d\\b"]
+  patterns:
+    - "rtx\\s*5090"
+    - "geforce\\s*5090"
 - id: dgxspark
-  name: DGX Spark / GB10 box
+  name: GB10 box (DGX Spark/GX10)
   vram: 128
+  fp: fp4
   bw: 273
-  fp4: native
-  floor_usd: 2300
+  floor_usd: 2700
   patterns:
     - "dgx\\s*spark"
     - "ascent\\s*gx10"
     - "\\bgx10\\b"
     - "\\bgb10\\b"
+    - "aorus\\s*atom|gigabyte\\s*atom"
+    - "edgexpert"
 - id: jetsonthor
   name: Jetson AGX Thor
   vram: 128
+  fp: fp4
   bw: 273
-  fp4: native
-  floor_usd: 1400
+  floor_usd: 2500
+  reject: ["carrier", "board only", "حاملة", "baseboard"]
   patterns:
     - "jetson\\s*(?:agx)?\\s*thor"
-- id: quietbox2
-  name: Tenstorrent QuietBox 2
-  vram: 128
-  fp4: native
+
+# ---------------- NVIDIA Ada / Hopper / Ampere (FP8 or FP16)
+- id: rtx4090_48
+  name: RTX 4090 48GB (CN mod)
+  vram: 48
+  fp: fp8
+  bw: 1008
+  floor_usd: 2400
+  patterns:
+    - "4090.{0,25}48\\s*g"
+    - "48\\s*g.{0,25}4090"
+- id: rtx4090
+  name: RTX 4090
+  vram: 24
+  fp: fp8
+  bw: 1008
+  floor_usd: 1300
+  reject: ["laptop", "notebook", "mobile", "4090\\s*d\\b"]
+  patterns:
+    - "rtx\\s*4090"
+- id: rtx6000ada
+  name: RTX 6000 Ada
+  vram: 48
+  fp: fp8
+  bw: 960
   floor_usd: 4000
   patterns:
-    - "quietbox\\s*2"
-- id: tenstorrent
-  name: Tenstorrent card
-  reject: ["tesla", "v100", "p40", "m40", "k80", "quadro"]
-  vram: 32
-  fp4: native
-  floor_usd: 250
+    - "6000\\s*ada"
+    - "ada.{0,15}6000"
+- id: l40s
+  name: L40S / L40
+  vram: 48
+  fp: fp8
+  bw: 864
+  floor_usd: 4000
   patterns:
-    - "tenstorrent"
-    - "\\b(?:p150|p100|n300|n150|wormhole|blackhole)\\b"
+    - "\\bl40s?\\b"
+- id: h100
+  name: H100 / H200
+  vram: 80
+  fp: fp8
+  bw: 2000
+  floor_usd: 14000
+  patterns:
+    - "\\bh100\\b"
+    - "\\bh200\\b"
   vram_overrides:
-    - ["p150", 32]
-    - ["p100", 28]
-    - ["n300", 24]
-    - ["n150", 12]
-- id: atlas350
-  name: Huawei Atlas 350
-  vram: 112
-  fp4: native
+    - ["h200", 141]
+    - ["94\\s*g", 94]
+- id: a100
+  name: A100
+  vram: 80
+  fp: fp16
+  bw: 1935
+  floor_usd: 4000
+  patterns:
+    - "\\ba100\\b"
+  vram_overrides:
+    - ["40\\s*g", 40]
+- id: a6000
+  name: RTX A6000
+  vram: 48
+  fp: fp16
+  bw: 768
+  floor_usd: 2600
+  patterns:
+    - "rtx\\s*a6000"
+    - "\\ba6000\\b"
+- id: a40
+  name: A40
+  vram: 48
+  fp: fp16
+  bw: 696
   floor_usd: 2500
   patterns:
-    - "atlas\\s*350"
-    - "ascend\\s*950"
-- id: macstudio
-  name: Mac Studio (Apple silicon)
+    - "\\ba40\\b"
+- id: a5000
+  name: RTX A5000
+  vram: 24
+  fp: fp16
+  bw: 768
+  floor_usd: 900
+  patterns:
+    - "rtx\\s*a5000"
+- id: a10
+  name: A10 / A30
+  vram: 24
+  fp: fp16
+  bw: 600
+  floor_usd: 700
+  patterns:
+    - "\\ba10\\b(?!0)"
+    - "\\ba30\\b"
+- id: rtx3090
+  name: RTX 3090 / 3090 Ti
+  vram: 24
+  fp: fp16
+  bw: 936
+  floor_usd: 550
+  reject: ["laptop", "notebook", "mobile"]
+  patterns:
+    - "rtx\\s*3090"
+    - "geforce\\s*3090"
+- id: rtx8000
+  name: Quadro RTX 8000 / 6000
+  vram: 48
+  fp: fp16
+  bw: 672
+  floor_usd: 1300
+  patterns:
+    - "quadro\\s*rtx\\s*8000"
+    - "rtx\\s*8000"
+    - "quadro\\s*rtx\\s*6000"
+  vram_overrides:
+    - ["6000", 24]
+- id: v100
+  name: Tesla V100 32GB
+  vram: 32
+  fp: fp16
+  bw: 900
+  floor_usd: 380
+  reject: ["16\\s*g"]
+  patterns:
+    - "\\bv100\\b"
+- id: p40
+  name: Tesla P40
+  vram: 24
+  fp: fp32
+  bw: 346
+  floor_usd: 120
+  patterns:
+    - "\\bp40\\b"
+- id: m40
+  name: Tesla M40 24GB
+  vram: 24
+  fp: fp32
+  bw: 288
+  floor_usd: 60
+  reject: ["12\\s*g"]
+  patterns:
+    - "\\bm40\\b"
+- id: orin64
+  name: Jetson AGX Orin 64GB
+  vram: 64
+  fp: fp16
+  bw: 204
+  floor_usd: 1200
+  reject: ["32\\s*g", "carrier"]
+  patterns:
+    - "agx\\s*orin"
+
+# ---------------- AMD
+- id: mi300x
+  name: Instinct MI300X
+  vram: 192
+  fp: fp8
+  bw: 5300
+  floor_usd: 9000
+  patterns:
+    - "mi300x?"
+- id: mi250
+  name: Instinct MI250 / MI210
+  vram: 64
+  fp: fp16
+  bw: 1600
+  floor_usd: 1500
+  patterns:
+    - "\\bmi2[15]0x?\\b"
+  vram_overrides:
+    - ["mi250", 128]
+- id: mi100
+  name: Instinct MI100
+  vram: 32
+  fp: fp16
+  bw: 1229
+  floor_usd: 400
+  patterns:
+    - "\\bmi100\\b"
+- id: mi50
+  name: Instinct MI50 / MI60 32GB
+  vram: 32
+  fp: fp16
+  bw: 1024
+  floor_usd: 90
+  reject: ["16\\s*g"]
+  patterns:
+    - "\\bmi50\\b"
+    - "\\bmi60\\b"
+    - "radeon\\s*vii.{0,20}32"
+- id: w7900
+  name: Radeon PRO W7900
+  vram: 48
+  fp: fp16
+  bw: 864
+  floor_usd: 2200
+  patterns:
+    - "w7900"
+- id: rx7900xtx
+  name: RX 7900 XTX
+  vram: 24
+  fp: fp16
+  bw: 960
+  floor_usd: 550
+  patterns:
+    - "7900\\s*xtx"
+- id: strixhalo
+  name: Ryzen AI Max+ 395 (Strix Halo)
+  vram: 128
+  fp: fp16
+  bw: 256
+  floor_usd: 1500
+  reject: ["32\\s*g(?:b)?\\s*(?:ram|lpddr)", "64\\s*g(?:b)?\\s*(?:ram|lpddr)"]
+  patterns:
+    - "ai\\s*max\\+?\\s*395"
+    - "strix\\s*halo"
+    - "gtr9|evo-?x2|framework\\s*desktop"
+  vram_overrides:
+    - ["\\b64\\s*g", 64]
+
+# ---------------- Intel / Huawei / Tenstorrent
+- id: gaudi2
+  name: Intel Gaudi 2
   vram: 96
-  fp4: sw
-  floor_usd: 1700
+  fp: fp8
+  bw: 2450
+  floor_usd: 900
+  patterns:
+    - "gaudi\\s*2"
+    - "hl-?225"
+- id: arcb60
+  name: Arc Pro B60 (24 / dual 48)
+  vram: 24
+  fp: fp16
+  bw: 456
+  floor_usd: 450
+  patterns:
+    - "arc\\s*pro\\s*b60"
+    - "\\bb60\\b.{0,20}(?:arc|intel)"
+  vram_overrides:
+    - ["dual|48\\s*g", 48]
+- id: atlas300i
+  name: Huawei Atlas 300I Duo 96GB
+  vram: 96
+  fp: fp16
+  bw: 408
+  floor_usd: 1000
+  patterns:
+    - "atlas\\s*300i?\\s*duo"
+    - "300i\\s*duo"
+- id: tenstorrent
+  name: Tenstorrent card
+  vram: 32
+  fp: fp8
+  bw: 512
+  floor_usd: 800
+  reject: ["tesla", "v100", "p40", "m40", "k80", "quadro"]
+  patterns:
+    - "tenstorrent"
+    - "blackhole\\s*p1[05]0"
+    - "wormhole\\s*n[13]"
+  vram_overrides:
+    - ["p100", 28]
+    - ["n300", 24]
+
+# ---------------- Apple (unified memory, no tensor floats)
+- id: macstudio
+  name: Mac Studio (M-Ultra/Max)
+  vram: 96
+  fp: fp16
+  bw: 819
+  floor_usd: 2200
   patterns:
     - "mac\\s*studio"
-    - "mac\\s*pro\\b"
   vram_overrides:
-    - ["512\\s*g(?:b)?", 512]
-    - ["256\\s*g(?:b)?", 256]
-    - ["192\\s*g(?:b)?", 192]
-    - ["128\\s*g(?:b)?", 128]
-    - ["96\\s*g(?:b)?", 96]
+    - ["512\\s*g", 512]
+    - ["256\\s*g", 256]
+    - ["192\\s*g", 192]
+    - ["128\\s*g", 128]
+    - ["\\b64\\s*g", 64]
+    - ["\\b32\\s*g|\\b36\\s*g", 32]
 - id: macbook
-  name: MacBook Pro 16 (Apple silicon)
+  name: MacBook Pro (M Max)
   vram: 128
-  fp4: sw
-  floor_usd: 2000
+  fp: fp16
+  bw: 546
+  floor_usd: 2500
   patterns:
     - "macbook\\s*pro"
   vram_overrides:
-    - ["192\\s*g(?:b)?", 192]
-    - ["128\\s*g(?:b)?", 128]
+    - ["128\\s*g", 128]
+    - ["\\b96\\s*g", 96]
+    - ["\\b64\\s*g", 64]
+    - ["\\b48\\s*g", 48]
+    - ["\\b36\\s*g|\\b32\\s*g|\\b24\\s*g|\\b18\\s*g|\\b16\\s*g", 16]

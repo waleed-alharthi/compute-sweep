@@ -1,4 +1,4 @@
-"""fp4sweep: crawl the markets for FP4-capable hardware, score by $/VRAM GB.
+"""fp4sweep: crawl the markets for >=24GB accelerators, score by landed $/VRAM GB in Oman.
 
 usage:
   python3 -m fp4sweep.run crawl [--only ADAPTER[,ADAPTER]]
@@ -14,24 +14,27 @@ import time
 
 from . import adapters
 from .config import EXPORT_PATH
-from .fetch import FetchError, _direct
+from . import verify
+from .fetch import FetchError, _direct, close_stealth
 from .store import Store, connect, load_catalog, refresh_fx
 
+# Removed 2026-10: discovery (generic web pages - articles and store fronts
+# ranked as listings), dubizzle (SERP snippets, no page behind them),
+# craigslist + kijiji (local pickup only: nothing there can reach Oman).
 ADAPTERS = {
     "opensooq": adapters.opensooq,
     "haraj": adapters.haraj,
     "ebay": adapters.ebay,
     "aliexpress_scrape": adapters.aliexpress_scrape,
     "aliexpress": adapters.aliexpress,
+    "dhgate": adapters.dhgate,
+    "alibaba": adapters.alibaba,
+    "yahoojp": adapters.yahoojp,
     "kleinanzeigen": adapters.kleinanzeigen,
     "indiamart": adapters.indiamart,
-    "craigslist": adapters.craigslist,
     "marktplaats": adapters.marktplaats,
-    "kijiji": adapters.kijiji,
     "olx": adapters.olx,
     "amazon": adapters.amazon,
-    "dubizzle": adapters.dubizzle,
-    "discovery": adapters.discovery,
     "retail": adapters.retail,
 }
 
@@ -44,6 +47,24 @@ def _delta7(series: list) -> float | None:
     if not old:
         return None
     return round((new - old) / old * 100, 1)
+
+
+def _diverse(rows, n: int, per_key: int = 2) -> list:
+    """The cheapest n listings, but at most per_key per (product, source):
+    ten identical V100 offers from one marketplace say less than the cheapest
+    two from each place that has them."""
+    out, seen = [], {}
+    for r in rows:
+        if r["verdict"] != "yes":
+            continue
+        k = (r["product"], r["source"])
+        if seen.get(k, 0) >= per_key:
+            continue
+        seen[k] = seen.get(k, 0) + 1
+        out.append(r)
+        if len(out) >= n:
+            break
+    return out
 
 
 def _fit(gb: int) -> str:
@@ -95,7 +116,11 @@ def export(db):
             "src": r["source"], "title": r["title"][:90], "url": r["url"],
             "usd": r["usd"], "price": r["price"], "cur": r["currency"],
             "gb": r["vram"], "product": r["product"], "fp4": r["fp4"],
-            "per_gb": r["usd_per_gb"], "cond": r["condition"],
+            "per_gb": r["landed_per_gb"], "list_per_gb": r["usd_per_gb"],
+            "landed": r["landed_usd"], "ship": r["ship"],
+            "units": r["units"], "verdict": r["verdict"],
+            "needs": r["needs"] or "",
+            "cond": r["condition"],
             "country": r["country"], "region": r["region"],
             "age_h": round((now - (r["first_seen"] or now)) / 3600, 1),
             "chg_h": round((now - (r["last_price_change"] or now)) / 3600, 1),
@@ -115,7 +140,7 @@ def export(db):
             "product": p, "gb": gb,
             "bw": catalog.get(r["catalog_id"] or "", {}).get("bw"),
             "fp4": r["fp4"], "fit": _fit(gb),
-            "min_usd": r["usd"], "per_gb": r["usd_per_gb"],
+            "min_usd": r["landed_usd"], "per_gb": r["landed_per_gb"],
             "n": sum(1 for a in active if a["product"] == p),
             "t7": t[-7:], "d7": _delta7(t),
         })
@@ -131,7 +156,7 @@ def export(db):
         },
         "news": [_row(r, now) for r in news[:20]],
         "drops": [dict(_row(r, now), drop_pct=pct) for r, pct in drops[:10]],
-        "best": [_row(r, now) for r in active[:40]],
+        "best": [_row(r, now) for r in _diverse(active, 40)],
         "street": street,
         "unknown": [{"title": r["title"][:80], "src": r["source"],
                      "usd": r["usd"], "url": r["url"]} for r in unknown[:20]],
@@ -153,12 +178,21 @@ def status(db):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="fp4sweep")
-    ap.add_argument("cmd", choices=["crawl", "export", "status"])
+    ap.add_argument("cmd", choices=["crawl", "export", "status", "verify"])
     ap.add_argument("--only")
     args = ap.parse_args(argv)
     db = connect()
     if args.cmd == "crawl":
-        crawl(db, args.only)
+        try:
+            crawl(db, args.only)
+        finally:
+            close_stealth()
+        ok, bad = verify.run(Store(db))
+        print(f"[verify] {ok} real, {bad} rejected")
+        export(db)
+    elif args.cmd == "verify":
+        ok, bad = verify.run(Store(db), max_batches=40)
+        print(f"[verify] {ok} real, {bad} rejected")
         export(db)
     elif args.cmd == "export":
         export(db)
