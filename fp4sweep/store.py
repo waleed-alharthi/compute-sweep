@@ -62,7 +62,13 @@ ACCESSORY_RE = re.compile(
     r"water\s?block|backplate|bracket|shroud|riser|riserless|schematic|"
     r"thermal pad|\bfan\b|cooler|heatsink|\bcable\b|adapter|sleeve|"
     r"\bcase\b|\bpsu\b|\bmb\b|motherboard|repair|donor|\bshell\b|"
-    r"shaper|\bstand\b|holder|\bport|liquid \b", re.I)
+    r"shaper|\bstand\b|holder|\bport|liquid \b|water\s?cool", re.I)
+
+# editorial pages the discovery adapter trips over: buyer's guides, FAQ,
+# "vs" explainers. A listing is a thing you can buy; a question is not.
+ARTICLE_RE = re.compile(
+    r"\?$|^(who|what|why|how|can you|should you|is the|are the)\b|"
+    r"\bfaq\b|\bvs\.?\s|\balternatives?\b|^best\s|^top\s+\d|compar(?:e|ison|ed)", re.I)
 
 
 def gpu_count(title: str) -> int:
@@ -108,6 +114,8 @@ class Store:
         matched = entry is not None and vram is not None and vram >= MIN_VRAM
         if matched and ACCESSORY_RE.search(c.title or ""):
             return  # "$240 RTX 5090" is a water block, not a card
+        if matched and ARTICLE_RE.search(c.title or ""):
+            return
         key = f"{c.source}:{c.ext_id}"
         old = self.db.execute(
             "SELECT usd, hits, last_price_change, currency FROM listings WHERE key=?",
