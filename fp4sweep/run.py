@@ -35,18 +35,21 @@ ADAPTERS = {
     "retail": adapters.retail,
 }
 
+def _delta7(series: list) -> float | None:
+    """% change across the last 7 daily points, oldest non-null vs newest."""
+    recent = [v for v in series[-7:] if v is not None]
+    if len(recent) < 2:
+        return None
+    old, new = recent[0], recent[-1]
+    if not old:
+        return None
+    return round((new - old) / old * 100, 1)
 
-def _row(r, now=None) -> dict:
-    now = now or time.time()
-    return {
-        "src": r["source"], "title": r["title"][:90], "url": r["url"],
-        "usd": r["usd"], "price": r["price"], "cur": r["currency"],
-        "gb": r["vram"], "product": r["product"], "fp4": r["fp4"],
-        "per_gb": r["usd_per_gb"], "cond": r["condition"],
-        "country": r["country"], "region": r["region"],
-        "age_h": round((now - (r["first_seen"] or now)) / 3600, 1),
-        "chg_h": round((now - (r["last_price_change"] or now)) / 3600, 1),
-    }
+
+def _fit(gb: int) -> str:
+    """Can one unit run the ~94GB int4 model + KV? From the master sheet."""
+    units = -(-105 // gb) if gb else 99
+    return "1u" if units <= 1 else f"x{units}"
 
 
 def crawl(db, only: str | None):
@@ -82,6 +85,42 @@ def export(db):
     news = store.news(48)
     drops = store.drops(168)
     unknown = store.unknown()
+    catalog = {e["id"]: e for e in load_catalog()}
+    trends = store.product_trends(14)
+
+    def _row(r, now=None) -> dict:
+        now = now or time.time()
+        t = trends.get(r["product"]) or []
+        row = {
+            "src": r["source"], "title": r["title"][:90], "url": r["url"],
+            "usd": r["usd"], "price": r["price"], "cur": r["currency"],
+            "gb": r["vram"], "product": r["product"], "fp4": r["fp4"],
+            "per_gb": r["usd_per_gb"], "cond": r["condition"],
+            "country": r["country"], "region": r["region"],
+            "age_h": round((now - (r["first_seen"] or now)) / 3600, 1),
+            "chg_h": round((now - (r["last_price_change"] or now)) / 3600, 1),
+            "bw": catalog.get(r["catalog_id"] or "", {}).get("bw"),
+            "t7": t[-7:], "d7": _delta7(t),
+        }
+        return row
+
+    street = []
+    for r in active:
+        p = r["product"]
+        if p in [s["product"] for s in street]:
+            continue
+        gb = r["vram"] or 0
+        t = trends.get(p) or []
+        street.append({
+            "product": p, "gb": gb,
+            "bw": catalog.get(r["catalog_id"] or "", {}).get("bw"),
+            "fp4": r["fp4"], "fit": _fit(gb),
+            "min_usd": r["usd"], "per_gb": r["usd_per_gb"],
+            "n": sum(1 for a in active if a["product"] == p),
+            "t7": t[-7:], "d7": _delta7(t),
+        })
+    street.sort(key=lambda s: s["per_gb"] or 9e9)
+
     payload = {
         "generated": now,
         "stats": {
@@ -93,6 +132,7 @@ def export(db):
         "news": [_row(r, now) for r in news[:20]],
         "drops": [dict(_row(r, now), drop_pct=pct) for r, pct in drops[:10]],
         "best": [_row(r, now) for r in active[:20]],
+        "street": street,
         "unknown": [{"title": r["title"][:80], "src": r["source"],
                      "usd": r["usd"], "url": r["url"]} for r in unknown[:20]],
     }

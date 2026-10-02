@@ -4,6 +4,7 @@
 - id: rtx5090
   name: RTX 5090
   vram: 32
+  bw: 1792
   fp4: native
   floor_usd: 1100
   patterns:
@@ -11,6 +12,7 @@
 - id: rtxpro6000bw
   name: RTX PRO 6000 Blackwell
   vram: 96
+  bw: 1792
   fp4: native
   floor_usd: 3800
   patterns:
@@ -22,6 +24,7 @@
 - id: rtxpro5000bw
   name: RTX PRO 5000 Blackwell
   vram: 48
+  bw: 1344
   fp4: native
   floor_usd: 2300
   patterns:
@@ -32,6 +35,7 @@
 - id: rtxpro4500bw
   name: RTX PRO 4500 Blackwell
   vram: 32
+  bw: 864
   fp4: native
   floor_usd: 1500
   patterns:
@@ -39,6 +43,7 @@
 - id: dgxspark
   name: DGX Spark / GB10 box
   vram: 128
+  bw: 273
   fp4: native
   floor_usd: 2300
   patterns:
@@ -49,6 +54,7 @@
 - id: jetsonthor
   name: Jetson AGX Thor
   vram: 128
+  bw: 273
   fp4: native
   floor_usd: 1400
   patterns:

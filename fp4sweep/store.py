@@ -203,6 +203,58 @@ class Store:
             "SELECT * FROM listings WHERE matched=0 AND last_seen>? "
             "ORDER BY last_seen DESC LIMIT 50", (cut,)).fetchall()
 
+    def product_trends(self, days: int = 14) -> dict[str, list]:
+        """Daily minimum street USD per catalog product, oldest first.
+
+        Reconstructed from each listing's price-event chain: the price in
+        effect on a day is the last event at or before it (the chain's
+        first prev_usd is the price before the first recorded change), and
+        a listing contributes only on days it was alive. A day with no
+        live listing is a None gap, never a zero - "no data" and "free"
+        are different facts. Gaps close as the sweep accumulates days.
+        """
+        day = 86400.0
+        now = time.time()
+        ends = [now - (days - 1 - i) * day for i in range(days)]
+        starts = [e - day for e in ends]
+        rows = self.db.execute(
+            "SELECT key, product, usd, prev_usd, first_seen, last_seen "
+            "FROM listings WHERE matched=1 AND product IS NOT NULL "
+            "AND last_seen>? AND usd IS NOT NULL", (starts[0] - day,)).fetchall()
+        if not rows:
+            return {}
+        events: dict[str, list[tuple]] = {}
+        for r in self.db.execute(
+                "SELECT key, ts, usd, prev_usd FROM price_events "
+                "WHERE key IN (%s) ORDER BY ts"
+                % ",".join("?" * len(rows)), [r["key"] for r in rows]):
+            events.setdefault(r["key"], []).append(
+                (r["ts"], r["usd"], r["prev_usd"]))
+        out: dict[str, list] = {}
+        for r in rows:
+            chain = events.get(r["key"]) or []
+            for i, d_end in enumerate(ends):
+                if r["first_seen"] > d_end or r["last_seen"] < starts[i] - day:
+                    continue
+                price = r["usd"]
+                seen_event = False
+                for ts, usd, prev in chain:
+                    if ts <= d_end:
+                        price = usd
+                        seen_event = True
+                    else:
+                        break
+                if not seen_event and chain and chain[0][2]:
+                    # before its first recorded change the listing sat at
+                    # that change's prev price, not at today's price
+                    price = chain[0][2]
+                if price is None:
+                    continue
+                series = out.setdefault(r["product"], [None] * days)
+                if series[i] is None or price < series[i]:
+                    series[i] = round(price, 2)
+        return out
+
 
 # ---- FX ----
 
