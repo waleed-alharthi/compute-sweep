@@ -31,6 +31,16 @@ CREATE TABLE IF NOT EXISTS fx(
 );
 CREATE INDEX IF NOT EXISTS ix_seen ON listings(last_seen);
 CREATE INDEX IF NOT EXISTS ix_first ON listings(first_seen);
+-- one row per listing per day it was seen alive: the raw material for
+-- any trend query (by make/model, source, ship class, condition...)
+CREATE TABLE IF NOT EXISTS sightings(
+  day TEXT, key TEXT, make TEXT, model TEXT, units INTEGER,
+  vram_unit INTEGER, vram_total INTEGER, fp TEXT, usd REAL,
+  landed_usd REAL, landed_per_gb REAL, ship TEXT, source TEXT,
+  country TEXT, condition TEXT, needs TEXT,
+  PRIMARY KEY(day, key)
+);
+CREATE INDEX IF NOT EXISTS ix_sight_model ON sightings(make, model, day);
 CREATE TABLE IF NOT EXISTS verdicts(
   key TEXT PRIMARY KEY, title TEXT, ok INTEGER, units INTEGER,
   vram_total INTEGER, reason TEXT, model TEXT, ts REAL
@@ -39,7 +49,8 @@ CREATE TABLE IF NOT EXISTS verdicts(
 
 # columns added by the 2026-10 overhaul; ALTERed onto older databases
 _NEW_COLS = (("ship", "TEXT"), ("landed_usd", "REAL"), ("landed_per_gb", "REAL"),
-             ("units", "INTEGER"), ("verdict", "TEXT"), ("needs", "TEXT"))
+             ("units", "INTEGER"), ("verdict", "TEXT"), ("needs", "TEXT"),
+             ("make", "TEXT"), ("model", "TEXT"), ("vram_unit", "INTEGER"))
 
 _CATALOG_PATH = Path(__file__).parent / "catalog.yaml"
 
@@ -251,6 +262,20 @@ class Store:
             "AND COALESCE(needs,'') != 'sxm' "
             "ORDER BY landed_per_gb ASC", (cut,)).fetchall()
 
+    def record_sightings(self) -> int:
+        """Snapshot every verified, live listing into today's sightings.
+        Idempotent per day (latest sweep of the day wins)."""
+        day = time.strftime("%Y-%m-%d")
+        cur = self.db.execute("""
+          INSERT OR REPLACE INTO sightings
+          SELECT ?, key, make, model, units, vram_unit, vram, fp4, usd,
+                 landed_usd, landed_per_gb, ship, source, country, condition,
+                 needs
+          FROM listings WHERE verdict='yes' AND matched=1 AND last_seen>?""",
+                              (day, time.time() - 26 * 3600))
+        self.db.commit()
+        return cur.rowcount
+
     def pending_verdicts(self, limit: int = 60) -> list[sqlite3.Row]:
         return self.db.execute(
             "SELECT key, title, url, source, price, currency, usd, vram "
@@ -260,7 +285,7 @@ class Store:
 
     def set_verdict(self, key: str, ok: bool, units: int | None,
                     vram_total: int | None, reason: str, model: str,
-                    needs: str = "") -> None:
+                    needs: str = "", make: str = "", hw_model: str = "") -> None:
         self.db.execute(
             "INSERT OR REPLACE INTO verdicts VALUES(?,?,?,?,?,?,?,?)",
             (key, None, int(ok), units, vram_total, reason, model, time.time()))
@@ -270,8 +295,12 @@ class Store:
             # the gate read the title properly: trust its VRAM over the regex
             self.db.execute(
                 "UPDATE listings SET verdict='yes', vram=?, units=?, needs=?, "
+                "make=?, model=?, vram_unit=?, "
                 "usd_per_gb=ROUND(usd/?,2), landed_per_gb=ROUND(landed_usd/?,2) "
-                "WHERE key=?", (vram_total, units, needs, vram_total, vram_total, key))
+                "WHERE key=?", (vram_total, units, needs, make or None,
+                                hw_model or None,
+                                vram_total // (units or 1),
+                                vram_total, vram_total, key))
         else:
             self.db.execute("UPDATE listings SET verdict=?, needs=? WHERE key=?",
                             ("yes" if ok else "no", needs, key))

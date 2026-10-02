@@ -115,6 +115,25 @@
   floor_usd: 4000
   patterns:
     - "\\bl40s?\\b"
+- id: rtx5000ada
+  name: RTX 5000 Ada
+  vram: 32
+  fp: fp8
+  bw: 576
+  floor_usd: 2200
+  patterns:
+    - "5000\\s*ada"
+    - "ada.{0,15}5000"
+- id: l4
+  name: NVIDIA L4
+  vram: 24
+  fp: fp8
+  bw: 300
+  floor_usd: 900
+  patterns:
+    - "\\bnvidia\\s*l4\\b"
+    - "\\bl4\\s*24\\s*g"
+    - "tesla\\s*l4\\b"
 - id: h100
   name: H100 / H200
   vram: 80

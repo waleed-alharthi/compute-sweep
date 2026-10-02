@@ -120,6 +120,8 @@ def export(db):
             "landed": r["landed_usd"], "ship": r["ship"],
             "units": r["units"], "verdict": r["verdict"],
             "needs": r["needs"] or "",
+            "make": r["make"] or "", "model": r["model"] or "",
+            "vram_unit": r["vram_unit"],
             "cond": r["condition"],
             "country": r["country"], "region": r["region"],
             "age_h": round((now - (r["first_seen"] or now)) / 3600, 1),
@@ -189,6 +191,7 @@ def main(argv=None):
             close_stealth()
         ok, bad = verify.run(Store(db))
         print(f"[verify] {ok} real, {bad} rejected")
+        print(f"[sightings] {Store(db).record_sightings()} rows for today")
         export(db)
     elif args.cmd == "verify":
         ok, bad = verify.run(Store(db), max_batches=40)

@@ -49,12 +49,17 @@ For ok=true also return:
   states memory, trust it over your assumptions. When a title lists several
   memory variants ("48G 96G", "16GB 32GB"), the price shown is for the
   SMALLEST variant - use that.
+- make: chip maker (NVIDIA, AMD, Intel, Huawei, Apple, Tenstorrent)
+- model: the accelerator model, normalised, no brand fluff
+  (e.g. "Tesla P40", "RTX 3090", "Instinct MI50", "Atlas 300I Duo",
+  "Ryzen AI Max+ 395", "GB10", "Jetson AGX Thor", "M3 Ultra")
+- vram_unit: memory in GB of ONE accelerator (vram_total / units)
 - needs: "" if it plugs into a normal PC (PCIe card, complete computer);
   "sxm" for SXM/SXM2/SXM4/OAM modules that need a special server board;
   "server" for passive datacenter cards that need server airflow.
 
 Return ONLY a JSON array, one object per input, same order:
-[{"i":0,"ok":true,"units":1,"vram_total":32,"needs":"","why":"short reason"}, ...]
+[{"i":0,"ok":true,"make":"NVIDIA","model":"Tesla V100","units":1,"vram_unit":32,"vram_total":32,"needs":"","why":"short reason"}, ...]
 
 Listings:
 """
@@ -125,7 +130,9 @@ def run(store, batch: int = 20, max_batches: int = 6) -> tuple[int, int]:
             needs = str(o.get("needs") or "").lower()
             needs = needs if needs in ("sxm", "server") else ""
             store.set_verdict(r["key"], good, units, vt,
-                              str(o.get("why") or "")[:200], MODEL, needs)
+                              str(o.get("why") or "")[:200], MODEL, needs,
+                              str(o.get("make") or "")[:30],
+                              str(o.get("model") or "")[:60])
             ok += good
             bad += not good
         time.sleep(1)

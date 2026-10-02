@@ -658,7 +658,9 @@ FAMILY_TERMS = (
     "rtx 4090 48gb", "rtx 4090", "rtx 3090", "rtx a6000", "rtx 6000 ada",
     "l40s", "a100 80gb", "quadro rtx 8000", "tesla v100 32gb", "tesla p40",
     "mi50 32gb", "mi100", "mi210", "radeon pro w7900", "7900 xtx",
-    "ai max 395 128gb", "gaudi2", "arc pro b60", "atlas 300i duo",
+    "ai max 395 128gb", "intel gaudi 2 hl-225h", "habana gaudi2 96gb",
+    "arc pro b60", "atlas 300i duo", "nvidia l4 24gb", "rtx 5000 ada",
+    "l40s 48gb", "tenstorrent blackhole p150",
     "mac studio 192gb", "mac studio 512gb", "agx orin 64gb",
 )
 
