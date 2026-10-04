@@ -52,7 +52,7 @@
   fp: fp4
   bw: 1792
   floor_usd: 1900
-  reject: ["laptop", "notebook", "mobile", "5090\\s*d\\b"]
+  reject: ["laptop", "notebook", "mobile", "5090\\s*d\\b", "ノート", "ゲーミングノート", "legion", "blade 16", "strix scar", "zephyrus"]
   patterns:
     - "rtx\\s*5090"
     - "geforce\\s*5090"
@@ -95,7 +95,7 @@
   fp: fp8
   bw: 1008
   floor_usd: 1300
-  reject: ["laptop", "notebook", "mobile", "4090\\s*d\\b"]
+  reject: ["laptop", "notebook", "mobile", "4090\\s*d\\b", "ノート", "ゲーミングノート", "legion", "blade 16", "strix scar", "zephyrus"]
   patterns:
     - "rtx\\s*4090"
 - id: rtx6000ada

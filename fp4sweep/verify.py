@@ -37,9 +37,12 @@ or "where to buy" pages, wanted/buying ads, rentals/cloud/hourly pricing,
 parts (carrier/base boards, coolers, fans, brackets, shrouds, risers, cables,
 PCBs, empty boxes, "for parts", broken/faulty/dead units, cores without
 memory), accounts/services, preorder deposits, listings whose price is
-clearly a placeholder (e.g. 1, 999999) or for something else, and bundle-bait
+clearly a placeholder (e.g. 1, 999999) or for something else, bundle-bait
 promos ("buy 5 get 3 free", "lowest price" with a price far under market for a
-datacenter card) - those quote a per-unit price only reachable on bulk orders.
+datacenter card), and multi-SKU catalog pages that list several different
+products at once ("X 96G Y 48GB Z 32GB") without saying which one the price is
+for - those quote a per-unit price only reachable on bulk orders or hide which
+SKU is being sold.
 
 For ok=true also return:
 - units: number of accelerators included at that price (1 unless the listing

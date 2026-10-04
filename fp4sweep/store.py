@@ -259,7 +259,6 @@ class Store:
         return self.db.execute(
             "SELECT * FROM listings WHERE matched=1 AND last_seen>? "
             "AND landed_per_gb IS NOT NULL AND COALESCE(verdict,'') != 'no' "
-            "AND COALESCE(needs,'') != 'sxm' "
             "ORDER BY landed_per_gb ASC", (cut,)).fetchall()
 
     def record_sightings(self) -> int:
