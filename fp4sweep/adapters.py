@@ -155,7 +155,11 @@ def haraj(sleep: float = 3.0):
 # ---------------------------------------------------------------- eBay
 
 EBAY_TERMS = ("rtx 5090", "rtx pro 6000 blackwell", "rtx pro 5000 blackwell",
-              "dgx spark", "tenstorrent", "jetson agx thor", "mac studio m5 max 128")
+              "dgx spark", "tenstorrent", "jetson agx thor", "mac studio m5 max 128",
+              # API route made these reachable; the HTML ladder could never
+              "tesla v100 32gb", "tesla v100s 32gb", "tesla p40 24gb",
+              "a100 80gb", "rtx 6000 ada 48gb", "quadro rtx 8000 48gb",
+              "8 way gpu server", "4 gpu server")
 
 
 def _ebay_api(sleep: float = 1.0):
