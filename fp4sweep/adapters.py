@@ -23,10 +23,16 @@ from .model import Candidate, parse_price
 # are contact-by-phone classifieds and delivery there cannot be guaranteed.
 OPENSOOQ_COUNTRIES = ("om",)
 OPENSOOQ_CATS = (
+    # verified 2026-10-17: these carry live Oman ads. The old trio
+    # (laptops-netbooks, desktop-pcs, tvs-and-satellites) returned zero
+    # items - OpenSooq Oman renamed them. Language is display chrome: the
+    # Arabic slugs surface the identical ad IDs, so English-only is fine.
     "computers-and-laptops/graphic-cards",
-    "computers-and-laptops/laptops-netbooks",
-    "computers-and-laptops/desktop-pcs",
-    "electronics-appliances/tvs-and-satellites",  # cheap; catches DGX boxes
+    "computers-and-laptops/computer-parts-and-components",
+    "computers-and-laptops/gaming-pc",
+    "computers-and-laptops/computers",
+    "computers-and-laptops/servers",
+    "computers-and-laptops/laptops",
 )
 CONDITION_RE = re.compile(r"\b(new|sealed|used|مستعمل|جديد)\b", re.I)
 
@@ -60,11 +66,12 @@ def _walk_products(obj):
                 pass
 
 
-def opensooq(pages: int = 2, sleep: float = 1.2):
+def opensooq(pages: int = 6, sleep: float = 1.2):
+    # 6 pages x ~30 covers the full Oman inventory in each productive
+    # category (graphic-cards holds ~94 ads, the rest ~120); deeper pages
+    # come back empty and the loop breaks on the first empty one.
     for country in OPENSOOQ_COUNTRIES:
         for cat in OPENSOOQ_CATS:
-            if cat == "electronics-appliances/tvs-and-satellites" and country != "om":
-                continue
             for page_no in range(1, pages + 1):
                 url = (f"https://{country}.opensooq.com/en/{cat}"
                        + (f"?page={page_no}" if page_no > 1 else ""))
@@ -106,53 +113,6 @@ def opensooq(pages: int = 2, sleep: float = 1.2):
                     yield from extract_page(body, url, source="opensooq",
                                             evidence=rung, country=country)
                 time.sleep(sleep)
-
-# ---------------------------------------------------------------- Haraj
-
-HARAJ_TERMS = ("haraj rtx 5090", "haraj rtx pro 6000", "haraj dgx spark",
-               "haraj rtx 6000", "haraj tenstorrent")
-
-
-def haraj(sleep: float = 3.0):
-    """Haraj's own search is a JS app with no shareable results URL, so the
-    item URLs come from the search index and each item page is rendered.
-    A price counts only when the page or the snippet states it with a
-    currency marker; unsnared "placeholder price" ads stay out."""
-    money = re.compile(
-        r"([\d][\d,.]{1,12})\s*(?:ريال|ر\.?\s?س|SAR)|"
-        r"(?:ريال|ر\.?\s?س|SAR)\s*[:=]?\s*([\d][\d,.]{1,12})", re.I)
-    deleted = re.compile(r"العرض محذوف|قديم|محذوف", re.I)
-    seen: set[str] = set()
-    for term in HARAJ_TERMS:
-        for r in _searxng(term):
-            url = r.get("url") or ""
-            m = re.match(r"https://haraj\.com\.sa/(1\d{9})/", url)
-            if not m or m.group(1) in seen:
-                continue
-            snippet = html.unescape((r.get("title") or "") + " " + (r.get("content") or ""))
-            if deleted.search(snippet):  # the index says the ad is gone
-                continue
-            seen.add(m.group(1))
-            title = (r.get("title") or "").strip()
-            try:
-                body, rung = get(url)
-                tm = re.search(r'"@type":"Thing","name":"([^"]+)"', body)
-                if tm:
-                    title = tm.group(1)
-            except FetchError:
-                body, rung = "", "serp"
-            pm = money.search(body or "") or money.search(snippet)
-            amount = None
-            if pm:
-                pp = parse_price(pm.group(0), "SAR")
-                if pp and pp[0] >= 100:
-                    amount = pp
-            if amount:
-                yield Candidate(source="haraj", ext_id=m.group(1), url=url,
-                                title=title or url, price=amount[0],
-                                currency=amount[1], country="sa",
-                                evidence=rung, meta={"term": term})
-        time.sleep(sleep)
 
 # ---------------------------------------------------------------- eBay
 

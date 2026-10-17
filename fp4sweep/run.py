@@ -23,7 +23,6 @@ from .store import Store, connect, load_catalog, refresh_fx
 # craigslist + kijiji (local pickup only: nothing there can reach Oman).
 ADAPTERS = {
     "opensooq": adapters.opensooq,
-    "haraj": adapters.haraj,
     "ebay": adapters.ebay,
     "aliexpress_scrape": adapters.aliexpress_scrape,
     "aliexpress": adapters.aliexpress,
