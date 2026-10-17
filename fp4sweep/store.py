@@ -133,7 +133,10 @@ def gpu_count(title: str) -> int:
     """"4x RTX 5090" / "quad 5090" workstations: the price is for the pile,
     so the pile's VRAM is what $/GB must divide by."""
     t = title.lower().replace("\u00d7", "x")
-    m = re.search(r"\b(\d)\s*x\s*(?:nvidia|asus|msi|gigabyte|pny|zotac)?\s*(?:rtx|geforce|\d{3,4})", t)
+    m = re.search(r"\b(\d{1,2})\s*(?:pcs?\b|pieces?\b|units?\b)", t)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"\b(\d)\s*x\s*(?:nvidia|asus|msi|gigabyte|pny|zotac)?\s*(?:rtx|geforce|tesla|\d{3,4})", t)
     if m:
         return int(m.group(1))
     for word, n in _WORD_COUNTS.items():
@@ -295,8 +298,17 @@ class Store:
         self.db.execute(
             "INSERT OR REPLACE INTO verdicts VALUES(?,?,?,?,?,?,?,?)",
             (key, None, int(ok), units, vram_total, reason, model, time.time()))
-        if ok and vram_total and vram_total < MIN_VRAM:
-            ok = False  # the gate read the title: it is a 16GB variant
+        if ok and vram_total:
+            fam = self.db.execute(
+                "SELECT catalog_id FROM listings WHERE key=?", (key,)).fetchone()
+            floor = MIN_VRAM
+            if fam and fam[0]:
+                for e in load_catalog():
+                    if e["id"] == fam[0]:
+                        floor = e.get("min_vram", MIN_VRAM)
+                        break
+        if ok and vram_total and vram_total < floor:
+            ok = False  # the gate read the title: it is a sub-floor variant
         if ok and vram_total:
             # the gate read the title properly: trust its VRAM over the regex
             self.db.execute(
