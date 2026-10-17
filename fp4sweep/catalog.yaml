@@ -190,6 +190,26 @@
   patterns:
     - "\\ba10\\b(?!0)"
     - "\\ba30\\b"
+- id: rtx3090_48
+  name: RTX 3090 48GB (mod)
+  vram: 48
+  fp: fp16
+  bw: 936
+  floor_usd: 1000
+  patterns:
+    - "3090.{0,25}48\\s*g"
+    - "48\\s*g.{0,25}3090"
+- id: b2080ti22
+  name: RTX 2080 Ti 22GB (mod)
+  vram: 22
+  min_vram: 22   # under MIN_VRAM on purpose: 22GB is the entire point
+  fp: fp16
+  bw: 616
+  floor_usd: 450
+  reject: ["laptop", "notebook", "mobile"]
+  patterns:
+    - "2080\\s*ti.{0,30}22\\s*g"
+    - "22\\s*g.{0,30}2080\\s*ti"
 - id: rtx3090
   name: RTX 3090 / 3090 Ti
   vram: 24
@@ -217,6 +237,16 @@
   floor_overrides:
     - ["6000", 800]   # the 24GB Turing variant trades under the 48GB's floor
     - ["titan", 800]
+- id: v100s
+  name: Tesla V100S 32GB
+  vram: 32
+  fp: fp16
+  bw: 1130   # 1.13 TB/s, the reason it exists (V100 does 900)
+  floor_usd: 500
+  reject: ["16\\s*g"]
+  patterns:
+    - "\\bv100s\\b"
+    - "v100\\s*s\\b"
 - id: v100
   name: Tesla V100 32GB
   vram: 32
@@ -254,6 +284,14 @@
     - "agx\\s*orin"
 
 # ---------------- AMD
+- id: mi325x
+  name: Instinct MI325X
+  vram: 256
+  fp: fp8
+  bw: 6000   # 6 TB/s HBM3E per AMD's datasheet
+  floor_usd: 10000
+  patterns:
+    - "mi325x?"
 - id: mi300x
   name: Instinct MI300X
   vram: 192
@@ -331,6 +369,31 @@
   patterns:
     - "gaudi\\s*2"
     - "hl-?225"
+    - "2nd[- ]generation\\s*gaudi"   # Intel's own marketing name for Gaudi 2
+    - "gaudi\\b(?!\\s*3)"
+- id: gaudi3
+  name: Intel Gaudi 3
+  vram: 128
+  fp: fp8
+  bw: 3700
+  floor_usd: 1200
+  patterns:
+    - "gaudi\\s*3"
+    - "hl-?3[0-9]{3}"
+- id: a16
+  name: Tesla A16 64GB
+  vram: 64
+  fp: fp16
+  bw: 200   # 4x independent 16GB GA107 chips @ 200 GB/s each (NVIDIA
+            # datasheet); bandwidth does NOT stack for LLM inference -
+            # same trap as the Atlas 300I Duo, it is a VDI board
+  floor_usd: 1000
+  reject: ["zenbook", "vivobook", "laptop", "notebook"]
+  vram_overrides:
+    - ["64\\s*g", 64]
+    - ["\\b16\\s*g", 16]   # A16-PCIE-16GB single-chip SKU: below MIN_VRAM
+  patterns:
+    - "\\ba16\\b"
 - id: arcb60
   name: Arc Pro B60 (24 / dual 48)
   vram: 24

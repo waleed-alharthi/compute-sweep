@@ -169,7 +169,8 @@ class Store:
         if WANTED_RE.search(c.title or ""):
             return
         entry, vram = match_catalog(c.title, catalog)
-        matched = entry is not None and vram is not None and vram >= MIN_VRAM
+        floor_v = entry.get("min_vram", MIN_VRAM) if entry else MIN_VRAM
+        matched = entry is not None and vram is not None and vram >= floor_v
         if matched and ACCESSORY_RE.search(c.title or ""):
             return  # "$240 RTX 5090" is a water block, not a card
         if matched and ARTICLE_RE.search(c.title or ""):

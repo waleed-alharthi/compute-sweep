@@ -160,6 +160,8 @@ EBAY_TERMS = ("rtx 5090", "rtx pro 6000 blackwell", "rtx pro 5000 blackwell",
               "tesla v100 32gb", "tesla v100s 32gb", "tesla p40 24gb",
               "a100 80gb", "rtx 6000 ada 48gb", "quadro rtx 8000 48gb",
               "quadro rtx 6000 24gb", "titan rtx 24gb",
+              "2080 ti 22gb", "rtx 3090 48gb", "tesla a16 64gb",
+              "gaudi 3 128gb", "mi325x",
               "8 way gpu server", "4 gpu server")
 
 
@@ -666,6 +668,8 @@ FAMILY_TERMS = (
     "dgx spark", "ascent gx10", "jetson agx thor",
     "rtx 4090 48gb", "rtx 4090", "rtx 3090", "rtx a6000", "rtx 6000 ada",
     "l40s", "a100 80gb", "quadro rtx 8000", "tesla v100 32gb", "tesla p40",
+    "tesla v100s 32gb", "2080 ti 22gb", "rtx 3090 48gb", "tesla a16 64gb",
+    "gaudi 3 128gb", "mi325x",
     "mi50 32gb", "mi100", "mi210", "radeon pro w7900", "7900 xtx",
     "ai max 395 128gb", "intel gaudi 2 hl-225h", "habana gaudi2 96gb",
     "arc pro b60", "atlas 300i duo", "nvidia l4 24gb", "rtx 5000 ada",
