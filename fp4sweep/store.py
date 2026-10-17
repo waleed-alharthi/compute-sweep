@@ -145,14 +145,26 @@ def gpu_count(title: str) -> int:
     return 1
 
 
+# a title naming a portable machine is a laptop ad, not a discrete-card ad;
+# Arabic is what the Oman listings use. Families that ARE laptop/box products
+# (their whole point is the chip inside a laptop) opt out via laptop_ok.
+LAPTOP_RE = re.compile(
+    r"\b(laptop|notebook|ultrabook)\b|لاب ?توب|لاب توب|حاسب ?محمول|"
+    r"ماك ?بوك|\bmacbook\b|gaming ?laptop", re.I)
+LAPTOP_OK = {"macbook", "strixhalo", "dgxspark", "jetsonthor", "orin64"}
+
+
 def match_catalog(title: str, catalog) -> tuple[dict, int] | tuple[None, None]:
     """First catalog entry whose patterns hit the title wins. VRAM can be
     corrected by vram_overrides (a 512 GB Mac Studio is not a 96 GB one)
     and by the GPU count of multi-card workstations."""
     t = title.lower()
+    laptop = bool(LAPTOP_RE.search(t))
     for entry in catalog:
         if any(re.search(r, t) for r in entry.get("reject") or ()):
             continue  # e.g. "Tesla P100" is not a Tenstorrent p100
+        if laptop and entry["id"] not in LAPTOP_OK:
+            continue  # "لابتوب RTX 5090" is a laptop, not the desktop card
         for pat in entry["patterns"]:
             if re.search(pat, t):
                 vram = entry.get("vram", 0)
