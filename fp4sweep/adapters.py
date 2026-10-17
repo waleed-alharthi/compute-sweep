@@ -19,7 +19,9 @@ from .model import Candidate, parse_price
 
 # ---------------------------------------------------------------- OpenSooq
 
-OPENSOOQ_COUNTRIES = ("om", "sa", "kw", "bh", "qa", "ae")
+# Oman only, by Waleed's decision 2026-10-17: the other OpenSooq countries
+# are contact-by-phone classifieds and delivery there cannot be guaranteed.
+OPENSOOQ_COUNTRIES = ("om",)
 OPENSOOQ_CATS = (
     "computers-and-laptops/graphic-cards",
     "computers-and-laptops/laptops-netbooks",
