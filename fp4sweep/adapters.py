@@ -159,6 +159,7 @@ EBAY_TERMS = ("rtx 5090", "rtx pro 6000 blackwell", "rtx pro 5000 blackwell",
               # API route made these reachable; the HTML ladder could never
               "tesla v100 32gb", "tesla v100s 32gb", "tesla p40 24gb",
               "a100 80gb", "rtx 6000 ada 48gb", "quadro rtx 8000 48gb",
+              "quadro rtx 6000 24gb", "titan rtx 24gb",
               "8 way gpu server", "4 gpu server")
 
 
@@ -175,9 +176,13 @@ def _ebay_api(sleep: float = 1.0):
                 if price is None or not cur:
                     continue
                 cond = (it.get("conditionDescription") or "").lower()
+                # current Browse API returns itemId as "v1|<legacy>|0" and no
+                # human link; the old numeric part is what ebay.com/itm wants
+                raw_id = str(it.get("itemId", ""))
+                legacy = raw_id.split("|")[1] if "|" in raw_id else raw_id
                 link = (it.get("link") or {}).get("href") or \
-                    "https://www.ebay.com/itm/" + str(it.get("itemId", ""))
-                yield Candidate(source="ebay", ext_id=str(it.get("itemId", "")),
+                    "https://www.ebay.com/itm/" + legacy
+                yield Candidate(source="ebay", ext_id=raw_id,
                                 url=link,
                                 title=html.unescape(it.get("title") or ""),
                                 price=float(price), currency=cur,

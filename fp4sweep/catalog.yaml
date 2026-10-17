@@ -210,8 +210,13 @@
     - "quadro\\s*rtx\\s*8000"
     - "rtx\\s*8000"
     - "quadro\\s*rtx\\s*6000"
+    - "titan\\s*rtx"   # same Turing TU102 silicon as the Quadro 6000
   vram_overrides:
     - ["6000", 24]
+    - ["titan", 24]
+  floor_overrides:
+    - ["6000", 800]   # the 24GB Turing variant trades under the 48GB's floor
+    - ["titan", 800]
 - id: v100
   name: Tesla V100 32GB
   vram: 32

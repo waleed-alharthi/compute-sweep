@@ -209,8 +209,14 @@ class Store:
             # nothing real is $5k/GB; that's a mis-parsed currency
             matched = 0
             per_gb = None
-        if matched and usd and entry and entry.get("floor_usd") \
-                and usd / (units or 1) < entry["floor_usd"]:
+        floor = entry.get("floor_usd") if entry else None
+        if entry and matched:
+            tl = (c.title or "").lower()
+            for fpat, fval in entry.get("floor_overrides") or ():
+                if re.search(fpat, tl):
+                    floor = fval
+                    break
+        if matched and usd and floor and usd / (units or 1) < floor:
             # below the floor it is a fake listing or a parts/scrap price
             matched = 0
             per_gb = None
@@ -221,7 +227,7 @@ class Store:
             ship,landed_usd,landed_per_gb,units)
           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(key) DO UPDATE SET
-            title=excluded.title, price=excluded.price, currency=excluded.currency,
+            title=excluded.title, url=excluded.url, price=excluded.price, currency=excluded.currency,
             usd=excluded.usd, prev_usd=excluded.prev_usd, condition=excluded.condition,
             stock=excluded.stock, evidence=excluded.evidence,
             catalog_id=excluded.catalog_id, product=excluded.product,
