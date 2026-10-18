@@ -48,7 +48,8 @@ For ok=true also return:
 - units: number of accelerators included at that price (1 unless the listing
   is a multi-GPU server/workstation/lot)
 - vram_total: total GPU memory in GB across all units at that price (for
-  unified-memory machines, total unified memory). Use the title; if the title
+  unified-memory machines, total unified memory) - MEMORY ONLY, never SSD or
+  storage: "36GB RAM 512GB SSD" is a 36GB machine. Use the title; if the title
   states memory, trust it over your assumptions. When a title lists several
   memory variants ("48G 96G", "16GB 32GB"), the price shown is for the
   SMALLEST variant - use that.
@@ -130,6 +131,12 @@ def run(store, batch: int = 20, max_batches: int = 6) -> tuple[int, int]:
             vt = int(vt) if isinstance(vt, (int, float)) and vt >= 8 else None
             units = o.get("units")
             units = int(units) if isinstance(units, (int, float)) and units >= 1 else None
+            vu = o.get("vram_unit")
+            vu = int(vu) if isinstance(vu, (int, float)) and vu >= 8 else None
+            if vt and units and vu and abs(vt - units * vu) > 0.25 * max(vt, units * vu):
+                # the two reads disagree (storage size read as memory, or a
+                # stale total): the per-unit memory is the one worth trusting
+                vt = units * vu
             needs = str(o.get("needs") or "").lower()
             needs = needs if needs in ("sxm", "server") else ""
             store.set_verdict(r["key"], good, units, vt,

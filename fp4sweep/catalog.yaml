@@ -442,12 +442,13 @@
   patterns:
     - "mac\\s*studio"
   vram_overrides:
-    - ["512\\s*g", 512]
-    - ["256\\s*g", 256]
-    - ["192\\s*g", 192]
-    - ["128\\s*g", 128]
-    - ["\\b64\\s*g", 64]
-    - ["\\b32\\s*g|\\b36\\s*g", 32]
+    # sizes must not be storage: "36GB RAM 512GB SSD" is a 36GB machine
+    - ["512\\s*g(?!\\s*(?:ssd|flash|nvme|storage|pci))", 512]
+    - ["256\\s*g(?!\\s*(?:ssd|flash|nvme|storage|pci))", 256]
+    - ["192\\s*g(?!\\s*(?:ssd|flash|nvme|storage|pci))", 192]
+    - ["128\\s*g(?!\\s*(?:ssd|flash|nvme|storage|pci))", 128]
+    - ["\\b64\\s*g(?!\\s*(?:ssd|flash|nvme|storage|pci))", 64]
+    - ["\\b32\\s*g(?:b)?\\s*(?:ram|unified|lpddr)|\\b36\\s*g", 32]
 - id: macbook
   name: MacBook Pro (M Max)
   vram: 128

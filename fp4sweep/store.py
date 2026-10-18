@@ -140,7 +140,10 @@ def gpu_count(title: str) -> int:
     if m:
         return int(m.group(1))
     for word, n in _WORD_COUNTS.items():
-        if re.search(rf"\b{word}\b", t):
+        # "Dual PCI-E x16" is an interface, "dual" only counts GPUs when a
+        # GPU word rides next to it ("dual RTX 3090", "2x GPU", "quad 4090")
+        if re.search(rf"\b{word}\b[^.,;]{{0,24}}?(rtx|gtx|gpu|tesla|mi\d|3090|4090"
+                     rf"|5090|2080|a?100\b|card|gpu|accelerator)", t):
             return n
     return 1
 
