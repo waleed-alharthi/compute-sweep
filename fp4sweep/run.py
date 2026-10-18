@@ -158,6 +158,13 @@ def export(db):
         "news": [_row(r, now) for r in news[:20]],
         "drops": [dict(_row(r, now), drop_pct=pct) for r, pct in drops[:10]],
         "best": [_row(r, now) for r in _diverse(active, 40)],
+        # complete multi-GPU machines and lots: whole servers a buyer plugs
+        # in once, ranked by the same landed $/GB as everything else
+        "servers": [_row(r, now) for r in _diverse(
+            [r for r in active if (r["units"] or 1) >= 2
+             and "server" in (r["title"] or "").lower()
+             + (r["model"] or "").lower()
+             or (r["units"] or 1) >= 4], 12)],
         "street": street,
         "unknown": [{"title": r["title"][:80], "src": r["source"],
                      "usd": r["usd"], "url": r["url"]} for r in unknown[:20]],

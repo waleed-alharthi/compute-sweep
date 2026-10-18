@@ -160,15 +160,18 @@ LAPTOP_OK = {"macbook", "strixhalo", "dgxspark", "jetsonthor", "orin64"}
 def match_catalog(title: str, catalog) -> tuple[dict, int] | tuple[None, None]:
     """First catalog entry whose patterns hit the title wins. VRAM can be
     corrected by vram_overrides (a 512 GB Mac Studio is not a 96 GB one)
-    and by the GPU count of multi-card workstations."""
+    and by the GPU count of multi-card workstations. A second pass tries
+    `loose` patterns: deliberate misspellings, multilingual names and the
+    vendor-typo forms observed in real listings (NVDIA, TESLAs, Redeon)."""
     t = title.lower()
     laptop = bool(LAPTOP_RE.search(t))
-    for entry in catalog:
+
+    def hit(entry) -> tuple[dict, int] | None:
         if any(re.search(r, t) for r in entry.get("reject") or ()):
-            continue  # e.g. "Tesla P100" is not a Tenstorrent p100
+            return None  # e.g. "Tesla P100" is not a Tenstorrent p100
         if laptop and entry["id"] not in LAPTOP_OK:
-            continue  # "لابتوب RTX 5090" is a laptop, not the desktop card
-        for pat in entry["patterns"]:
+            return None  # "لابتوب RTX 5090" is a laptop, not the desktop card
+        for pat in list(entry["patterns"]) + list(entry.get("loose") or ()):
             if re.search(pat, t):
                 vram = entry.get("vram", 0)
                 for vpat, vval in entry.get("vram_overrides") or ():
@@ -176,6 +179,16 @@ def match_catalog(title: str, catalog) -> tuple[dict, int] | tuple[None, None]:
                         vram = vval
                         break
                 return entry, vram * gpu_count(title)
+        return None
+
+    # strict names first across ALL families, then typos: a loose tesla m40
+    # must never steal a title that names a strict Tesla M40's bigger sibling
+    for entry in catalog:
+        if (r := hit(entry)) and any(re.search(p, t) for p in entry["patterns"]):
+            return r
+    for entry in catalog:
+        if (r := hit(entry)):
+            return r
     return None, None
 
 

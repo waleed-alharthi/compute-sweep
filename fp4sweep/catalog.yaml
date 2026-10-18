@@ -69,6 +69,8 @@
     - "\\bgb10\\b"
     - "aorus\\s*atom|gigabyte\\s*atom"
     - "edgexpert"
+  loose:
+    - "nvidia\\s+spark|spark.{0,8}dgx|dgx.{0,8}spark"
 - id: jetsonthor
   name: Jetson AGX Thor
   vram: 128
@@ -107,6 +109,8 @@
   patterns:
     - "6000\\s*ada"
     - "ada.{0,15}6000"
+  loose:
+    - "\\brtx\\s*6000\\b"   # sellers drop "Ada" ("RTX 6000 Gddr6 ADA", "RTX 6000 W11P")
 - id: l40s
   name: L40S / L40
   vram: 48
@@ -143,6 +147,8 @@
   patterns:
     - "\\bh100\\b"
     - "\\bh200\\b"
+  loose:
+    - "\\bh800\\b"          # China-market H100 variant, same tier
   vram_overrides:
     - ["h200", 141]
     - ["94\\s*g", 94]
