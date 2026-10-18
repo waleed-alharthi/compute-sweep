@@ -193,7 +193,7 @@ def main(argv=None):
         print(f"[sightings] {Store(db).record_sightings()} rows for today")
         export(db)
     elif args.cmd == "verify":
-        ok, bad = verify.run(Store(db), max_batches=40)
+        ok, bad = verify.run(Store(db), max_batches=120)
         print(f"[verify] {ok} real, {bad} rejected")
         export(db)
     elif args.cmd == "export":

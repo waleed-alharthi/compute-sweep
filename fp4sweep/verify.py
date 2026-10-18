@@ -121,7 +121,17 @@ def run(store, batch: int = 20, max_batches: int = 6) -> tuple[int, int]:
                 print(f"  [verify] {model} failed: {str(exc)[:100]}", flush=True)
         if out is None:
             break  # both upstreams down: leave the rest pending for next sweep
-        by_i = {o.get("i"): o for o in out if isinstance(o, dict)}
+        # models drift between "i" and "id" as the index key; accept both,
+        # else the whole batch stays pending and this batch is retried forever
+        by_i = {}
+        seq = 0
+        for o in out:
+            if not isinstance(o, dict):
+                continue
+            k = o.get("i", o.get("id"))
+            k = int(k) if isinstance(k, (int, float)) else seq
+            by_i.setdefault(k, o)
+            seq += 1
         for i, r in enumerate(rows):
             o = by_i.get(i)
             if o is None:
