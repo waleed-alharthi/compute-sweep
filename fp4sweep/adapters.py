@@ -118,13 +118,21 @@ def opensooq(pages: int = 6, sleep: float = 1.2):
 
 EBAY_TERMS = ("rtx 5090", "rtx pro 6000 blackwell", "rtx pro 5000 blackwell",
               "dgx spark", "tenstorrent", "jetson agx thor", "mac studio m5 max 128",
+              "rtx 4090", "rtx 3090", "rtx a6000 48gb",
               # API route made these reachable; the HTML ladder could never
               "tesla v100 32gb", "tesla v100s 32gb", "tesla p40 24gb",
-              "a100 80gb", "rtx 6000 ada 48gb", "quadro rtx 8000 48gb",
+              "tesla m40 24gb", "a100 80gb", "a40 48gb", "a30 24gb",
+              "rtx 6000 ada 48gb", "quadro rtx 8000 48gb",
               "quadro rtx 6000 24gb", "titan rtx 24gb",
               "2080 ti 22gb", "rtx 3090 48gb", "tesla a16 64gb",
-              "gaudi 3 128gb", "mi325x",
-              "8 way gpu server", "4 gpu server")
+              "gaudi 3 128gb", "intel gaudi 2 hl-225h", "mi325x",
+              "mi50 32gb", "mi60 32gb", "mi100 32gb", "mi210 64gb",
+              "mi300x", "radeon pro w7900", "7900 xtx",
+              "atlas 300i duo", "nvidia l4 24gb", "l40s 48gb",
+              "rtx 5000 ada", "arc pro b60", "tenstorrent blackhole p150",
+              "ai max 395 128gb", "agx orin 64gb",
+              "rtx a5000 24gb", "rtx pro 4000 blackwell", "rtx pro 4500 blackwell",
+              "v100 sxm2", "gpu server 4", "8 way gpu server")
 
 
 def _ebay_api(sleep: float = 1.0):

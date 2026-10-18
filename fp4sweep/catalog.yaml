@@ -379,7 +379,7 @@
   floor_usd: 1200
   patterns:
     - "gaudi\\s*3"
-    - "hl-?3[0-9]{3}"
+    - "hl-?3(25n|38n)"   # Gaudi module names; bare HL-31xx/32xx are Brother printers
 - id: a16
   name: Tesla A16 64GB
   vram: 64

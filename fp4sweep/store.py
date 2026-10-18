@@ -310,17 +310,24 @@ class Store:
         self.db.execute(
             "INSERT OR REPLACE INTO verdicts VALUES(?,?,?,?,?,?,?,?)",
             (key, None, int(ok), units, vram_total, reason, model, time.time()))
+        fam = self.db.execute(
+            "SELECT catalog_id, usd, units FROM listings WHERE key=?",
+            (key,)).fetchone()
+        entry = floor = None
+        if fam and fam[0]:
+            for e in load_catalog():
+                if e["id"] == fam[0]:
+                    entry = e
+                    break
         if ok and vram_total:
-            fam = self.db.execute(
-                "SELECT catalog_id FROM listings WHERE key=?", (key,)).fetchone()
-            floor = MIN_VRAM
-            if fam and fam[0]:
-                for e in load_catalog():
-                    if e["id"] == fam[0]:
-                        floor = e.get("min_vram", MIN_VRAM)
-                        break
+            floor = (entry or {}).get("min_vram", MIN_VRAM)
         if ok and vram_total and vram_total < floor:
             ok = False  # the gate read the title: it is a sub-floor variant
+        if ok and entry and entry.get("floor_usd") and fam["usd"]:
+            # a title the gate blessed at a price no real one sells for is
+            # the classic fake-card listing ($311 "V100 32GB"); floor wins
+            if fam["usd"] / max(units or fam["units"] or 1, 1) < entry["floor_usd"]:
+                ok = False
         if ok and vram_total:
             # the gate read the title properly: trust its VRAM over the regex
             self.db.execute(
