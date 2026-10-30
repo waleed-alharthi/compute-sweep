@@ -714,11 +714,21 @@ def alibaba(sleep: float = 1.5, pages: int = 2):
                    "galleryProductOfferResultViewService?"
                    + urlencode({"searchweb": "Y", "SearchText": term,
                                 "page": page}))
-            try:
-                body, rung = get(url, allow_browser=False)
-                offers = json.loads(body)["data"]["offerList"]
-            except Exception as exc:
-                print(f"  [alibaba] {term!r}: {str(exc)[:80]}", flush=True)
+            # the service intermittently answers 200 with a gallery shell and
+            # no offerList (5-10 of ~50 terms per sweep); the same query a
+            # moment later carries it, so retry instead of losing the term
+            offers = None
+            for attempt in range(3):
+                try:
+                    body, rung = get(url, allow_browser=False)
+                    offers = json.loads(body)["data"]["offerList"]
+                    break
+                except Exception as exc:
+                    err = exc
+                    time.sleep(2.0)
+            if offers is None:
+                print(f"  [alibaba] {term!r}: {type(err).__name__} {str(err)[:80]}",
+                      flush=True)
                 break
             for o in offers:
                 info, tp, sup = o.get("information") or {}, \
