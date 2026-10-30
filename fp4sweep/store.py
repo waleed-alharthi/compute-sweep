@@ -133,7 +133,10 @@ def gpu_count(title: str) -> int:
     """"4x RTX 5090" / "quad 5090" workstations: the price is for the pile,
     so the pile's VRAM is what $/GB must divide by."""
     t = title.lower().replace("\u00d7", "x")
-    m = re.search(r"\b(\d{1,2})\s*(?:pcs?\b|pieces?\b|units?\b)", t)
+    # "pcs"/"pieces"/"units", never a bare "pc" ("WIFI 7 PC" is a computer)
+    # and never stock ("4 UNITS AVAILABLE" sells them one at a time)
+    m = re.search(r"\b(\d{1,2})\s*(?:pcs\b|pieces?\b|units?\b)"
+                  r"(?!\s*(?:avail|in\s*stock|left|ready))", t)
     if m:
         return int(m.group(1))
     m = re.search(r"\b(\d)\s*x\s*(?:nvidia|asus|msi|gigabyte|pny|zotac)?\s*(?:rtx|geforce|tesla|\d{3,4})", t)
@@ -153,7 +156,11 @@ def gpu_count(title: str) -> int:
 # (their whole point is the chip inside a laptop) opt out via laptop_ok.
 LAPTOP_RE = re.compile(
     r"\b(laptop|notebook|ultrabook)\b|لاب ?توب|لاب توب|حاسب ?محمول|"
-    r"ماك ?بوك|\bmacbook\b|gaming ?laptop", re.I)
+    r"ماك ?بوك|\bmacbook\b|gaming ?laptop|"
+    # mobile workstations: "ThinkPad P16 ... RTX Pro 4000, 64GB" is a laptop
+    # GPU next to system RAM, not a 64 GB desktop card
+    r"\bthinkpad\b|\bzbook\b|\bpro\s*max\s*1[468]\b|\bprecision\s*7[67]\d0\b|"
+    r"\bw?q?uxga\b|\b1[4-8](?:\.\d)?\s*(?:\"|”|''|inch\b)", re.I)
 LAPTOP_OK = {"macbook", "strixhalo", "dgxspark", "jetsonthor", "orin64"}
 
 
@@ -209,9 +216,13 @@ class Store:
         key = f"{c.source}:{c.ext_id}"
         old = self.db.execute(
             "SELECT usd, hits, last_price_change, currency, title, verdict, "
-            "vram, units FROM listings WHERE key=?", (key,)).fetchone()
+            "vram, units, catalog_id FROM listings WHERE key=?", (key,)).fetchone()
+        # the gate judged a title AS a family: a catalog edit that moves the
+        # title elsewhere (Strix box out of GB10, 2x 3090 out of the 48GB
+        # mod) voids that judgement, so it is re-gated, never inherited
         gated = old is not None and old["verdict"] == "yes" \
-            and old["title"] == c.title and old["vram"]
+            and old["title"] == c.title and old["vram"] \
+            and old["catalog_id"] == (entry["id"] if entry else None)
         if gated:  # the legitimacy gate read this exact title: keep its VRAM
             vram = old["vram"]
         now = time.time()
@@ -269,7 +280,9 @@ class Store:
             hits=hits+1, raw=excluded.raw, ship=excluded.ship,
             landed_usd=excluded.landed_usd, landed_per_gb=excluded.landed_per_gb,
             units=excluded.units,
-            verdict=CASE WHEN listings.title=excluded.title THEN listings.verdict END
+            verdict=CASE WHEN listings.title=excluded.title
+                         AND listings.catalog_id IS excluded.catalog_id
+                         THEN listings.verdict END
         """, (key, c.source, c.ext_id, c.url, c.title, c.price, c.currency, usd,
               prev_usd, c.region, c.country, c.condition, c.stock, c.evidence,
               entry["id"] if matched else (entry["id"] if entry else None),
@@ -289,6 +302,65 @@ class Store:
         return round(amount / rate, 2) if rate else None
 
     # ---- views for the export ----
+
+    def rematch(self, catalog, hours: float = 72.0) -> dict[str, int]:
+        """Re-run the matcher over live rows after a catalog edit, without
+        touching last_seen/hits (a sweep does that). A row whose family
+        changes, or that matches for the first time, is re-gated; a single
+        unit whose override now reads LESS memory than the gate stored
+        (Thor T4000 is 64 GB, not 128) is re-gated too. Rows the matcher
+        no longer accepts (laptops, sub-floor) leave the board."""
+        cut = time.time() - hours * 3600
+        n = {"moved": 0, "new": 0, "dropped": 0, "shrunk": 0}
+        for r in self.db.execute(
+                "SELECT key, title, usd, landed_usd, catalog_id, matched, vram, "
+                "units, verdict FROM listings WHERE last_seen>?", (cut,)).fetchall():
+            title = r["title"] or ""
+            if WANTED_RE.search(title):
+                continue
+            entry, vram = match_catalog(title, catalog)
+            ok = entry is not None and vram is not None \
+                and vram >= entry.get("min_vram", MIN_VRAM) \
+                and not ACCESSORY_RE.search(title) and not ARTICLE_RE.search(title)
+            same = entry is not None and entry["id"] == r["catalog_id"]
+            # the gate's unit count beats the regex for a family it judged
+            units = (r["units"] or 1) if same and r["verdict"] == "yes" \
+                else gpu_count(title)
+            if ok and r["usd"] and entry.get("floor_usd"):
+                floor = entry["floor_usd"]
+                for fpat, fval in entry.get("floor_overrides") or ():
+                    if re.search(fpat, title.lower()):
+                        floor = fval
+                        break
+                ok = r["usd"] / units >= floor
+            if ok and r["usd"] and r["usd"] / vram > 5000:
+                ok = False  # mis-parsed currency, as in upsert
+            new_id = entry["id"] if entry else None
+            if not ok:
+                if r["matched"]:
+                    self.db.execute(
+                        "UPDATE listings SET matched=0, catalog_id=?, "
+                        "usd_per_gb=NULL, landed_per_gb=NULL WHERE key=?",
+                        (new_id, r["key"]))
+                    n["dropped"] += 1
+                continue
+            moved = new_id != r["catalog_id"]
+            fresh = not r["matched"]
+            shrunk = (not moved and not fresh and (r["units"] or 1) <= 1
+                      and r["vram"] and vram < r["vram"])
+            if not (moved or fresh or shrunk):
+                continue
+            self.db.execute(
+                "UPDATE listings SET catalog_id=?, product=?, fp4=?, matched=1, "
+                "vram=?, units=?, verdict=NULL, usd_per_gb=?, landed_per_gb=? "
+                "WHERE key=?",
+                (new_id, entry["name"], entry["fp"], vram, units,
+                 round(r["usd"] / vram, 2) if r["usd"] else None,
+                 round(r["landed_usd"] / vram, 2) if r["landed_usd"] else None,
+                 r["key"]))
+            n["moved" if moved else "new" if fresh else "shrunk"] += 1
+        self.db.commit()
+        return n
 
     def active(self, hours: float = 72.0) -> list[sqlite3.Row]:
         """Buyable now: matched, seen by a sweep in the last 72h, not

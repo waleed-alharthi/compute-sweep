@@ -46,6 +46,16 @@
   floor_usd: 1100
   patterns:
     - "rtx\\s*pro\\s*4000"
+- id: rtx5090_96
+  name: RTX 5090 96GB (CN mod)
+  vram: 96
+  fp: fp4
+  bw: 1792
+  floor_usd: 3000   # Suqiao's Alibaba listing is $3,888 (Tom's Hardware, 2026-09-11)
+  reject: ["laptop", "notebook", "96\\s*gb?\\s*(?:ram|ddr|memory)", "ddr[45]", "\\b(?:2\\s*[x×]|[x×]\\s*2|two)\\b", "dual\\s*(?:rtx|nvidia|geforce|gpu|3090|4090|5090)"]
+  patterns:
+    - "5090\\s*(?:d\\s*)?(?:gpu\\s*|graphics\\s*card\\s*)?96\\s*g"
+    - "96\\s*g\\w*\\s*(?:gddr7\\s*)?(?:rtx\\s*)?5090"
 - id: rtx5090
   name: RTX 5090
   vram: 32
@@ -62,6 +72,7 @@
   fp: fp4
   bw: 273
   floor_usd: 2700
+  reject: ["ryzen", "ai\\s*max", "\\b395\\b", "strix"]   # Strix Halo boxes keyword-stuff "GB10"
   patterns:
     - "dgx\\s*spark"
     - "ascent\\s*gx10"
@@ -80,6 +91,8 @@
   reject: ["carrier", "board only", "حاملة", "baseboard"]
   patterns:
     - "jetson\\s*(?:agx)?\\s*thor"
+  vram_overrides:
+    - ["t4000", 64]   # T4000 module: 64 GB LPDDR5X (NVIDIA datasheet); T5000 is 128
 
 # ---------------- NVIDIA Ada / Hopper / Ampere (FP8 or FP16)
 - id: rtx4090_48
@@ -88,6 +101,7 @@
   fp: fp8
   bw: 1008
   floor_usd: 2400
+  reject: ["\\b(?:2\\s*[x×]|[x×]\\s*2|two)\\b", "dual\\s*(?:rtx|nvidia|geforce|gpu|3090|4090|5090)"]   # two stock 24GB cards, not a mod
   patterns:
     - "4090.{0,25}48\\s*g"
     - "48\\s*g.{0,25}4090"
@@ -100,6 +114,16 @@
   reject: ["laptop", "notebook", "mobile", "4090\\s*d\\b", "ノート", "ゲーミングノート", "legion", "blade 16", "strix scar", "zephyrus"]
   patterns:
     - "rtx\\s*4090"
+- id: rtx4080_32
+  name: RTX 4080 Super 32GB (CN mod)
+  vram: 32
+  fp: fp8
+  bw: 736
+  floor_usd: 1300
+  reject: ["laptop", "notebook", "32\\s*gb?\\s*(?:ram|ddr|memory)", "ddr[45]", "\\b16\\s*gb?\\b"]
+  patterns:
+    - "4080[^,+/|]{0,14}?\\b32\\s*g"   # "4080 Super Turbo 32GB"; a comma ends the card
+    - "32\\s*g\\w*\\s*(?:gddr6x?\\s*)?(?:rtx\\s*)?4080"
 - id: rtx6000ada
   name: RTX 6000 Ada
   vram: 48
@@ -119,6 +143,15 @@
   floor_usd: 4000
   patterns:
     - "\\bl40s?\\b"
+- id: l20
+  name: NVIDIA L20 48GB
+  vram: 48
+  fp: fp8
+  bw: 864   # 384-bit GDDR6 @ 18 Gbps (TechPowerUp)
+  floor_usd: 2500
+  patterns:
+    - "\\b(?:tesla|nvidia)\\s*l20\\b"
+    - "\\bl20\\s*48\\s*g"
 - id: rtx5000ada
   name: RTX 5000 Ada
   vram: 32
@@ -160,6 +193,7 @@
   floor_usd: 4000
   patterns:
     - "\\ba100\\b"
+    - "\\ba800\\b"   # China-market A100, same silicon
   vram_overrides:
     - ["40\\s*g", 40]
 - id: a6000
@@ -202,6 +236,7 @@
   fp: fp16
   bw: 936
   floor_usd: 1000
+  reject: ["\\b(?:2\\s*[x×]|[x×]\\s*2|two)\\b", "dual\\s*(?:rtx|nvidia|geforce|gpu|3090|4090|5090)"]   # "2x RTX 3090 48GB" is a dual-card box
   patterns:
     - "3090.{0,25}48\\s*g"
     - "48\\s*g.{0,25}3090"
@@ -343,6 +378,34 @@
   floor_usd: 2200
   patterns:
     - "w7900"
+- id: w7800
+  name: Radeon PRO W7800
+  vram: 32
+  fp: fp16
+  bw: 576   # the 48 GB SKU (Nov 2024) runs 864 GB/s
+  floor_usd: 1000
+  patterns:
+    - "w7800"
+  vram_overrides:
+    - ["48\\s*g", 48]
+- id: w6800
+  name: Radeon PRO W6800 32GB
+  vram: 32
+  fp: fp16
+  bw: 512
+  floor_usd: 400
+  patterns:
+    - "w6800"
+- id: r9700
+  name: Radeon AI PRO R9700 / R9600D
+  vram: 32
+  fp: fp8
+  bw: 640   # both 32 GB GDDR6 256-bit 640 GB/s, FP8 matrix (amd.com)
+  floor_usd: 900
+  patterns:
+    - "\\br9700\\b"
+    - "\\br9600d\\b"
+    - "ai\\s*pro\\s*r9[67]00"
 - id: rx7900xtx
   name: RX 7900 XTX
   vram: 24
@@ -411,6 +474,15 @@
     - "\\bb60\\b.{0,20}(?:arc|intel)"
   vram_overrides:
     - ["dual|48\\s*g", 48]
+- id: arcb70
+  name: Arc Pro B70 32GB
+  vram: 32
+  fp: fp16
+  bw: 608   # 256-bit GDDR6 @ 19 Gbps; $949 MSRP (Intel, 2026)
+  floor_usd: 650
+  patterns:
+    - "arc\\s*pro\\s*b70"
+    - "\\bb70\\b.{0,20}(?:arc|intel)"
 - id: atlas300i
   name: Huawei Atlas 300I Duo 96GB
   vram: 96
@@ -432,11 +504,17 @@
   reject: ["tesla", "v100", "p40", "m40", "k80", "quadro"]
   patterns:
     - "tenstorrent"
-    - "blackhole\\s*p1[05]0"
-    - "wormhole\\s*n[13]"
+    - "blackhole\\W{0,3}p1[05]0"
+    - "wormhole\\W{0,3}n[13]"
+    - "\\bp1(?:00a|50[abc])\\b"   # the vendor store titles cards "p150b", "p100a"
+    - "\\bn[13]00s\\b"
+    - "quietbox"
   vram_overrides:
+    - ["quietbox.{0,6}2|quietbox.{0,20}blackhole", 128]   # 4x p150
+    - ["quietbox", 96]   # 4x n300
     - ["p100", 28]
     - ["n300", 24]
+    - ["n150", 12]   # below MIN_VRAM: dropped
 
 # ---------------- Apple (unified memory, no tensor floats)
 - id: macstudio
@@ -454,7 +532,8 @@
     - ["192\\s*g(?!\\s*(?:ssd|flash|nvme|storage|pci))", 192]
     - ["128\\s*g(?!\\s*(?:ssd|flash|nvme|storage|pci))", 128]
     - ["\\b64\\s*g(?!\\s*(?:ssd|flash|nvme|storage|pci))", 64]
-    - ["\\b32\\s*g(?:b)?\\s*(?:ram|unified|lpddr)|\\b36\\s*g", 32]
+    - ["\\b36\\s*g", 36]   # M4 Max base
+    - ["\\b32\\s*g(?:b)?\\s*(?:ram|unified|lpddr)", 32]
 - id: macbook
   name: MacBook Pro (M Max)
   vram: 128

@@ -5,6 +5,7 @@ per site to a few dozen requests, which is also what keeps the crawl alive.
 """
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import html
 import json
@@ -132,7 +133,12 @@ EBAY_TERMS = ("rtx 5090", "rtx pro 6000 blackwell", "rtx pro 5000 blackwell",
               "rtx 5000 ada", "arc pro b60", "tenstorrent blackhole p150",
               "ai max 395 128gb", "agx orin 64gb",
               "rtx a5000 24gb", "rtx pro 4000 blackwell", "rtx pro 4500 blackwell",
-              "v100 sxm2", "gpu server 4", "8 way gpu server")
+              "v100 sxm2", "gpu server 4", "8 way gpu server",
+              # added 2026-10-31: shipping 32-96GB parts the sweep never searched
+              "radeon ai pro r9700", "radeon ai pro r9600d", "arc pro b70",
+              "radeon pro w7800", "radeon pro w6800 32gb", "rtx 5090 96gb",
+              "rtx 4080 super 32gb", "nvidia l20 48gb", "mac studio m5 ultra",
+              "jetson t4000", "tenstorrent quietbox")
 
 
 def _ebay_api(sleep: float = 1.0):
@@ -219,6 +225,8 @@ AE_TERMS = ("rtx 5090", "rtx pro 6000", "dgx spark", "tenstorrent",
 def aliexpress(sleep: float = 1.0):
     from . import aliexpress_api
     if not aliexpress_api.available():
+        print("  [aliexpress] API disabled: no ~/.config/fp4sweep/aliexpress.json"
+              " (aliexpress_scrape covers the site)", flush=True)
         return
     for term in AE_TERMS:
         try:
@@ -454,7 +462,8 @@ def kijiji(sleep: float = 2.0):
 
 def amazon(sleep: float = 5.0):
     """Search results are browser-rung only: direct gets a 200 soft-block page."""
-    for term in ("rtx 5090", "rtx pro 6000", "dgx spark", "tenstorrent"):
+    for term in ("rtx 5090", "rtx pro 6000", "dgx spark", "tenstorrent",
+                 "radeon ai pro r9700", "arc pro b70"):
         url = "https://www.amazon.com/s?" + urlencode({"k": term})
         try:
             body = _browserless(url)
@@ -465,11 +474,18 @@ def amazon(sleep: float = 5.0):
             asin = re.match(r"([A-Z0-9]{10})", blk)
             if not asin or asin.group(1) in seen:
                 continue
-            t = re.search(r'<h2[^>]*>.*?<span[^>]*>([^<]{15,150})</span>',
-                          blk, re.S) or re.search(
-                r'"([^"]{15,150}?)"[^>]*class="[^"]*a-text-normal', blk)
+            # a card is a brand <h2> ("PNY") then a title <h2 aria-label=...>;
+            # one regex across both used to run on into "4.6 out of 5 stars"
+            parts = []
+            for attrs, inner in re.findall(r"<h2([^>]*)>(.*?)</h2>", blk, re.S):
+                label = re.search(r'aria-label="([^"]+)"', attrs)
+                text = html.unescape(label.group(1) if label
+                                     else re.sub(r"<[^>]+>", "", inner)).strip()
+                if text and "out of 5 stars" not in text:
+                    parts.append(text)
+            title = " ".join(parts)[:150]
             p = re.search(r'class="a-offscreen">\$([\d,]+(?:\.\d\d)?)', blk)
-            if not (t and p):
+            if len(title) < 12 or not p:
                 continue
             pp = parse_price("$" + p.group(1), "USD")
             if not pp or pp[0] < 100:
@@ -477,7 +493,7 @@ def amazon(sleep: float = 5.0):
             seen.add(asin.group(1))
             yield Candidate(source="amazon", ext_id=asin.group(1),
                             url="https://www.amazon.com/dp/" + asin.group(1),
-                            title=html.unescape(t.group(1)),
+                            title=title,
                             price=pp[0], currency="USD", country="us",
                             condition="new", evidence="browser",
                             meta={"term": term})
@@ -645,6 +661,8 @@ FAMILY_TERMS = (
     "arc pro b60", "atlas 300i duo", "nvidia l4 24gb", "rtx 5000 ada",
     "l40s 48gb", "tenstorrent blackhole p150",
     "mac studio 192gb", "mac studio 512gb", "agx orin 64gb",
+    "radeon ai pro r9700", "arc pro b70", "radeon pro w7800",
+    "rtx 5090 96gb", "rtx 4080 super 32gb", "l20 48gb",
 )
 
 
@@ -734,7 +752,8 @@ def yahoojp(sleep: float = 2.0):
     """Yahoo! Auctions Japan: domestic-only sellers, bought through a proxy
     (Buyee/ZenMarket) - which is why it is ranked with a proxy surcharge.
     Uses the buy-now price when there is one, else the current bid, and
-    keeps only auctions with more than 12h left."""
+    keeps only auctions with more than 12h left. The search page moved to
+    Next.js (2026-10): the items live in __NEXT_DATA__, not data-* attrs."""
     now = time.time()
     for term in FAMILY_TERMS:
         url = ("https://auctions.yahoo.co.jp/search/search?"
@@ -743,24 +762,30 @@ def yahoojp(sleep: float = 2.0):
             body, rung = get(url, allow_browser=False)
         except FetchError:
             continue
-        for blk in body.split('<div class="Product__bonus')[1:]:
-            aid = re.search(r'data-auction-id="(\w+)"', blk)
-            title = re.search(r'data-auction-title="([^"]+)"', blk)
-            price = re.search(r'data-auction-price="(\d+)"', blk)
-            bin_ = re.search(r'data-auction-buynowprice="(\d+)"', blk)
-            end = re.search(r'data-auction-endtime="(\d+)"', blk)
-            if not (aid and title and price):
+        state = _next_data(body) or {}
+        try:
+            items = (state["props"]["pageProps"]["initialState"]["search"]
+                     ["items"]["listing"]["items"]) or []
+        except (KeyError, TypeError):
+            print(f"  [yahoojp] {term!r}: no listing in __NEXT_DATA__", flush=True)
+            items = []
+        for it in items:
+            aid, title = it.get("auctionId"), it.get("title")
+            bin_ = int(it.get("buyNowPrice") or 0)
+            price = int(it.get("price") or 0)
+            if not (aid and title and (bin_ or price)):
                 continue
-            yen = int(bin_.group(1)) if bin_ and int(bin_.group(1)) > 0 \
-                else int(price.group(1))
-            if end and int(end.group(1)) - now < 12 * 3600 and not \
-                    (bin_ and int(bin_.group(1)) > 0):
+            try:
+                end = dt.datetime.fromisoformat(it.get("endTime") or "").timestamp()
+            except ValueError:
+                end = None
+            if end and end - now < 12 * 3600 and not bin_:
                 continue  # a bid ending soon will close far above today's price
-            yield Candidate(source="yahoojp", ext_id=aid.group(1),
-                            url="https://auctions.yahoo.co.jp/jp/auction/" + aid.group(1),
-                            title=html.unescape(title.group(1)), price=yen,
+            yield Candidate(source="yahoojp", ext_id=aid,
+                            url="https://auctions.yahoo.co.jp/jp/auction/" + aid,
+                            title=html.unescape(title), price=bin_ or price,
                             currency="JPY", country="jp",
-                            condition="used", evidence=rung,
-                            meta={"term": term, "ship": "proxy",
-                                  "bin": bool(bin_ and int(bin_.group(1)) > 0)})
+                            condition="new" if it.get("itemCondition") == "NEW"
+                            else "used", evidence=rung,
+                            meta={"term": term, "ship": "proxy", "bin": bool(bin_)})
         time.sleep(sleep)

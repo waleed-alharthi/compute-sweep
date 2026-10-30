@@ -26,8 +26,11 @@ listing for being "unreleased", "non-existent" or "a preorder" because of the
 product name: NVIDIA DGX Spark / GB10 boxes (ASUS Ascent GX10, Gigabyte
 AI TOP ATOM, MSI EdgeXpert, Dell Pro Max GB10), Jetson AGX Thor (T5000/T4000),
 RTX 5090, RTX PRO 4000/4500/5000/6000 Blackwell, AMD Ryzen AI Max+ 395 boxes,
-Intel Arc Pro B60, Apple M4/M5 Max and M3 Ultra Macs, Tenstorrent Blackhole,
-Huawei Atlas 300I Duo, and Chinese 48GB RTX 4090 mods.
+Intel Arc Pro B60 and B70 (32GB), AMD Radeon AI PRO R9700 and R9600D (32GB),
+Radeon PRO W7800 48GB, NVIDIA L20 48GB, Apple M4/M5 Max and M3/M5 Ultra Macs,
+Jetson T4000 (64GB) and T5000 (128GB) modules, Tenstorrent Blackhole and
+QuietBox, Huawei Atlas 300I Duo, and Chinese GPU memory mods (RTX 4090 48GB,
+RTX 4080 Super 32GB, RTX 5090 96GB).
 
 For each listing decide if it is a REAL OFFER TO SELL a COMPLETE, WORKING
 accelerator/GPU/AI computer that a buyer can purchase now at the stated price.
@@ -118,7 +121,9 @@ def run(store, batch: int = 20, max_batches: int = 6) -> tuple[int, int]:
                 out = _parse(_call(prompt, model))
                 break
             except Exception as exc:
-                print(f"  [verify] {model} failed: {str(exc)[:100]}", flush=True)
+                # a wall-clock timeout stringifies to "": name the type
+                print(f"  [verify] {model} failed: {type(exc).__name__} "
+                      f"{str(exc)[:100]}", flush=True)
         if out is None:
             break  # both upstreams down: leave the rest pending for next sweep
         # models drift between "i" and "id" as the index key; accept both,

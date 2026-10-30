@@ -52,10 +52,16 @@ def _diverse(rows, n: int, per_key: int = 2) -> list:
     """The cheapest n listings, but at most per_key per (product, source):
     ten identical V100 offers from one marketplace say less than the cheapest
     two from each place that has them."""
-    out, seen = [], {}
+    out, seen, dupes = [], {}, set()
     for r in rows:
         if r["verdict"] != "yes":
             continue
+        # one seller relisting the same offer under several ids (seven
+        # AliExpress DGX Sparks at $3,127.75) is one row, not seven
+        d = (r["source"], r["product"], round(r["landed_usd"] or 0))
+        if d in dupes:
+            continue
+        dupes.add(d)
         k = (r["product"], r["source"])
         if seen.get(k, 0) >= per_key:
             continue
@@ -186,7 +192,7 @@ def status(db):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="fp4sweep")
-    ap.add_argument("cmd", choices=["crawl", "export", "status", "verify"])
+    ap.add_argument("cmd", choices=["crawl", "export", "status", "verify", "rematch"])
     ap.add_argument("--only")
     args = ap.parse_args(argv)
     db = connect()
@@ -200,6 +206,12 @@ def main(argv=None):
         print(f"[sightings] {Store(db).record_sightings()} rows for today")
         export(db)
     elif args.cmd == "verify":
+        ok, bad = verify.run(Store(db), max_batches=120)
+        print(f"[verify] {ok} real, {bad} rejected")
+        export(db)
+    elif args.cmd == "rematch":
+        # after a catalog edit: re-file live rows now, gate the moved ones
+        print(f"[rematch] {Store(db).rematch(load_catalog())}")
         ok, bad = verify.run(Store(db), max_batches=120)
         print(f"[verify] {ok} real, {bad} rejected")
         export(db)

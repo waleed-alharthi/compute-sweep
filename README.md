@@ -9,6 +9,8 @@ clidash FP4 MARKET panel reads.
     python3 -m fp4sweep.run crawl [--only opensooq,haraj,ebay,dubizzle,discovery,retail]
     python3 -m fp4sweep.run export
     python3 -m fp4sweep.run status
+    python3 -m fp4sweep.run rematch   # after a catalog edit: re-file live rows, re-gate moved ones
+    python3 -m unittest discover tests
 
 Store: ~/.local/state/fp4sweep/market.db (listings + price_events + fx)
 Export: ~/.local/state/fp4sweep/market.json
