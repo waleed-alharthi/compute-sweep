@@ -105,7 +105,7 @@ def _parse(text: str) -> list[dict]:
     return out
 
 
-def _judge(rows) -> list[dict] | None:
+def _judge(rows, models: list) -> list[dict] | None:
     """One batch through the primary, then the fallback. An empty reply is
     a failure too: a reasoning model that spends its whole token budget
     deliberating returns content "" (finish_reason=length), and treating
@@ -113,7 +113,7 @@ def _judge(rows) -> list[dict] | None:
     lines = [f'{i}. [{r["source"]}] "{r["title"]}" - {r["price"]:g} {r["currency"]}'
              for i, r in enumerate(rows)]
     prompt = PROMPT.replace("{today}", time.strftime("%Y-%m-%d")) + "\n".join(lines)
-    for model in (MODEL, FALLBACK):
+    for model in list(models):
         try:
             out = _parse(_call(prompt, model))
         except Exception as exc:
@@ -122,6 +122,11 @@ def _judge(rows) -> list[dict] | None:
                   f"{str(exc)[:100]}", flush=True)
             continue
         if out:
+            if model != models[0]:
+                # the primary is timing out tonight: stop paying its 90 s
+                # wall clock on every batch, lead with what answered
+                models.remove(model)
+                models.insert(0, model)
             return out
         print(f"  [verify] {model} returned no verdicts ({len(rows)} rows)", flush=True)
     return None
@@ -136,9 +141,10 @@ def run(store, batch: int = 20, max_batches: int = 6) -> tuple[int, int]:
     pool = list(store.pending_verdicts(batch * max_batches))
     queue = [pool[i:i + batch] for i in range(0, len(pool), batch)]
     failed_in_a_row = 0
+    models = [MODEL, FALLBACK]
     while queue:
         rows = queue.pop(0)
-        out = _judge(rows)
+        out = _judge(rows, models)
         if out is None:
             failed_in_a_row += 1
             if failed_in_a_row >= 3:

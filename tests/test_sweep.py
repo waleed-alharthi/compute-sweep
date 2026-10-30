@@ -222,6 +222,22 @@ class GateLoopTest(unittest.TestCase):
         self.assertEqual(ok, 20)
         self.assertEqual(sizes, [20, 20, 5, 5, 5, 5])
 
+    def test_a_timing_out_primary_stops_leading(self):
+        from fp4sweep import verify
+        calls = []
+
+        def call(prompt, model):
+            calls.append(model)
+            if model == verify.MODEL:
+                raise TimeoutError()
+            return self._reply(prompt.count("[ebay]"))
+        store = _FakeStore(60)
+        with mock.patch.object(verify, "_call", side_effect=call), \
+                mock.patch("time.sleep"):
+            self.assertEqual(verify.run(store, batch=20, max_batches=3), (60, 0))
+        self.assertEqual(calls, [verify.MODEL, verify.FALLBACK,
+                                 verify.FALLBACK, verify.FALLBACK])
+
     def test_dead_gateway_stops_the_run(self):
         from fp4sweep import verify
         store = _FakeStore(120)
