@@ -175,5 +175,61 @@ class RematchTest(unittest.TestCase):
         self.assertEqual((r[0], r[1]), ("strixhalo", None))
 
 
+class _FakeStore:
+    def __init__(self, n):
+        self.rows = [{"key": f"k{i}", "source": "ebay", "title": f"t{i}",
+                      "price": 1.0, "currency": "USD"} for i in range(n)]
+        self.judged = {}
+
+    def pending_verdicts(self, limit):
+        return [r for r in self.rows if r["key"] not in self.judged][:limit]
+
+    def set_verdict(self, key, ok, *a):
+        self.judged[key] = ok
+
+
+class GateLoopTest(unittest.TestCase):
+    def _reply(self, n):
+        return json.dumps([{"i": i, "ok": True, "units": 1, "vram_total": 32,
+                            "vram_unit": 32} for i in range(n)])
+
+    def test_empty_reply_falls_through_to_the_fallback(self):
+        from fp4sweep import verify
+        calls = []
+
+        def call(prompt, model):
+            calls.append(model)
+            return "" if model == verify.MODEL else self._reply(prompt.count("[ebay]"))
+        store = _FakeStore(20)
+        with mock.patch.object(verify, "_call", side_effect=call), \
+                mock.patch("time.sleep"):
+            ok, bad = verify.run(store, batch=20, max_batches=1)
+        self.assertEqual((ok, bad), (20, 0))
+        self.assertEqual(calls, [verify.MODEL, verify.FALLBACK])
+
+    def test_a_batch_no_model_answers_is_split_not_resent(self):
+        from fp4sweep import verify
+        sizes = []
+
+        def call(prompt, model):
+            n = prompt.count("[ebay]")
+            sizes.append(n)
+            return "" if n > 5 else self._reply(n)  # only small batches get through
+        store = _FakeStore(20)
+        with mock.patch.object(verify, "_call", side_effect=call), \
+                mock.patch("time.sleep"):
+            ok, _ = verify.run(store, batch=20, max_batches=6)
+        self.assertEqual(ok, 20)
+        self.assertEqual(sizes, [20, 20, 5, 5, 5, 5])
+
+    def test_dead_gateway_stops_the_run(self):
+        from fp4sweep import verify
+        store = _FakeStore(120)
+        with mock.patch.object(verify, "_call", side_effect=OSError("down")) as c, \
+                mock.patch("time.sleep"):
+            self.assertEqual(verify.run(store, batch=20, max_batches=6), (0, 0))
+        self.assertEqual(c.call_count, 6)  # 3 judgements x 2 models
+
+
 if __name__ == "__main__":
     unittest.main()

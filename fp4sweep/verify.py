@@ -105,27 +105,49 @@ def _parse(text: str) -> list[dict]:
     return out
 
 
+def _judge(rows) -> list[dict] | None:
+    """One batch through the primary, then the fallback. An empty reply is
+    a failure too: a reasoning model that spends its whole token budget
+    deliberating returns content "" (finish_reason=length), and treating
+    that as "no verdicts" re-sent the same batch until max_batches ran out."""
+    lines = [f'{i}. [{r["source"]}] "{r["title"]}" - {r["price"]:g} {r["currency"]}'
+             for i, r in enumerate(rows)]
+    prompt = PROMPT.replace("{today}", time.strftime("%Y-%m-%d")) + "\n".join(lines)
+    for model in (MODEL, FALLBACK):
+        try:
+            out = _parse(_call(prompt, model))
+        except Exception as exc:
+            # a wall-clock timeout stringifies to "": name the type
+            print(f"  [verify] {model} failed: {type(exc).__name__} "
+                  f"{str(exc)[:100]}", flush=True)
+            continue
+        if out:
+            return out
+        print(f"  [verify] {model} returned no verdicts ({len(rows)} rows)", flush=True)
+    return None
+
+
 def run(store, batch: int = 20, max_batches: int = 6) -> tuple[int, int]:
-    """Judge up to batch*max_batches pending listings. Returns (ok, rejected)."""
+    """Judge up to batch*max_batches pending listings. Returns (ok, rejected).
+    The pool is fetched once and walked in order, so a batch no model can
+    answer is never re-sent within a run; it is split into fives instead,
+    which keeps a few hard titles from blocking every row behind them."""
     ok = bad = 0
-    for _ in range(max_batches):
-        rows = store.pending_verdicts(batch)
-        if not rows:
-            break
-        lines = [f'{i}. [{r["source"]}] "{r["title"]}" - {r["price"]:g} {r["currency"]}'
-                 for i, r in enumerate(rows)]
-        prompt = PROMPT.replace("{today}", time.strftime("%Y-%m-%d")) + "\n".join(lines)
-        out = None
-        for model in (MODEL, FALLBACK):
-            try:
-                out = _parse(_call(prompt, model))
-                break
-            except Exception as exc:
-                # a wall-clock timeout stringifies to "": name the type
-                print(f"  [verify] {model} failed: {type(exc).__name__} "
-                      f"{str(exc)[:100]}", flush=True)
+    pool = list(store.pending_verdicts(batch * max_batches))
+    queue = [pool[i:i + batch] for i in range(0, len(pool), batch)]
+    failed_in_a_row = 0
+    while queue:
+        rows = queue.pop(0)
+        out = _judge(rows)
         if out is None:
-            break  # both upstreams down: leave the rest pending for next sweep
+            failed_in_a_row += 1
+            if failed_in_a_row >= 3:
+                print("  [verify] upstreams not answering: rest stays pending", flush=True)
+                break
+            if len(rows) > 5:
+                queue[0:0] = [rows[i:i + 5] for i in range(0, len(rows), 5)]
+            continue
+        failed_in_a_row = 0
         # models drift between "i" and "id" as the index key; accept both,
         # else the whole batch stays pending and this batch is retried forever
         by_i = {}
