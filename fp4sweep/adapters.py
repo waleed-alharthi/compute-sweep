@@ -138,7 +138,11 @@ EBAY_TERMS = ("rtx 5090", "rtx pro 6000 blackwell", "rtx pro 5000 blackwell",
               "radeon ai pro r9700", "radeon ai pro r9600d", "arc pro b70",
               "radeon pro w7800", "radeon pro w6800 32gb", "rtx 5090 96gb",
               "rtx 4080 super 32gb", "nvidia l20 48gb", "mac studio m5 ultra",
-              "jetson t4000", "tenstorrent quietbox")
+              "jetson t4000", "tenstorrent quietbox",
+              # added 2026-11-05
+              "rtx pro 5500 blackwell", "rtx spark", "dgx spark 64gb",
+              "ryzen ai max+ pro 495", "mac mini m5 pro 64gb", "mac mini 64gb",
+              "huawei atlas 350")
 
 
 def _ebay_api(sleep: float = 1.0):
@@ -663,6 +667,7 @@ FAMILY_TERMS = (
     "mac studio 192gb", "mac studio 512gb", "agx orin 64gb",
     "radeon ai pro r9700", "arc pro b70", "radeon pro w7800",
     "rtx 5090 96gb", "rtx 4080 super 32gb", "l20 48gb",
+    "rtx pro 5500", "ryzen ai max+ 495", "atlas 350",
 )
 
 

@@ -30,7 +30,11 @@ Intel Arc Pro B60 and B70 (32GB), AMD Radeon AI PRO R9700 and R9600D (32GB),
 Radeon PRO W7800 48GB, NVIDIA L20 48GB, Apple M4/M5 Max and M3/M5 Ultra Macs,
 Jetson T4000 (64GB) and T5000 (128GB) modules, Tenstorrent Blackhole and
 QuietBox, Huawei Atlas 300I Duo, and Chinese GPU memory mods (RTX 4090 48GB,
-RTX 4080 Super 32GB, RTX 5090 96GB).
+RTX 4080 Super 32GB, RTX 5090 96GB). Also shipping since autumn 2026: RTX PRO
+5500 Blackwell 84GB, NVIDIA RTX Spark (N1X) laptops and desktops with up to
+128GB unified memory, DGX Spark 64GB, AMD Ryzen AI Max+ PRO 495 ("Gorgon
+Halo") boxes with 192GB, Mac mini M5 Pro and M6, Mac Studio M5 Ultra, and the
+Huawei Atlas 350 (Ascend 950PR, 112GB).
 
 For each listing decide if it is a REAL OFFER TO SELL a COMPLETE, WORKING
 accelerator/GPU/AI computer that a buyer can purchase now at the stated price.

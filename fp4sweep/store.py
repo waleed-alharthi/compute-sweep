@@ -161,7 +161,8 @@ LAPTOP_RE = re.compile(
     # GPU next to system RAM, not a 64 GB desktop card
     r"\bthinkpad\b|\bzbook\b|\bpro\s*max\s*1[468]\b|\bprecision\s*7[67]\d0\b|"
     r"\bw?q?uxga\b|\b1[4-8](?:\.\d)?\s*(?:\"|”|''|inch\b)", re.I)
-LAPTOP_OK = {"macbook", "strixhalo", "dgxspark", "jetsonthor", "orin64"}
+LAPTOP_OK = {"macbook", "strixhalo", "gorgonhalo", "dgxspark", "rtxspark",
+             "jetsonthor", "orin64"}
 
 
 def match_catalog(title: str, catalog) -> tuple[dict, int] | tuple[None, None]:
@@ -346,8 +347,12 @@ class Store:
                 continue
             moved = new_id != r["catalog_id"]
             fresh = not r["matched"]
-            shrunk = (not moved and not fresh and (r["units"] or 1) <= 1
-                      and r["vram"] and vram < r["vram"])
+            # only when an override fired (T4000 = 64): a gate that reads more
+            # than the family default on its own is not a catalog change, and
+            # re-gating it every rematch just buys the same answer again
+            overridden = vram != entry.get("vram", 0) * gpu_count(title)
+            shrunk = (not moved and not fresh and overridden
+                      and (r["units"] or 1) <= 1 and r["vram"] and vram < r["vram"])
             if not (moved or fresh or shrunk):
                 continue
             self.db.execute(
