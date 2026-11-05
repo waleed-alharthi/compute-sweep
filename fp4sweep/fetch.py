@@ -42,17 +42,22 @@ STEALTH = "stealth"
 _camo = None
 
 
-def stealth(url: str, settle_ms: int = 6000) -> str:
-    """Camoufox (patched Firefox, virtual display): the rung for sites that
-    wall both plain HTTP and headless Chrome (DHgate, Alibaba, noon, CEX).
-    One browser per crawl, started on first use; close_stealth() ends it."""
+def stealth_page():
+    """A fresh tab in the crawl's shared Camoufox browser; caller closes it."""
     global _camo
     if _camo is None:
         from camoufox.sync_api import Camoufox
         cm = Camoufox(headless="virtual", humanize=True, os="windows",
                       locale="en-US")
         _camo = (cm, cm.__enter__())
-    page = _camo[1].new_page()
+    return _camo[1].new_page()
+
+
+def stealth(url: str, settle_ms: int = 6000) -> str:
+    """Camoufox (patched Firefox, virtual display): the rung for sites that
+    wall both plain HTTP and headless Chrome (DHgate, Alibaba, noon, CEX).
+    One browser per crawl, started on first use; close_stealth() ends it."""
+    page = stealth_page()
     try:
         page.goto(url, timeout=45000, wait_until="domcontentloaded")
         page.wait_for_timeout(settle_ms)

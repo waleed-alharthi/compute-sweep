@@ -50,7 +50,10 @@ CREATE TABLE IF NOT EXISTS verdicts(
 # columns added by the 2026-10 overhaul; ALTERed onto older databases
 _NEW_COLS = (("ship", "TEXT"), ("landed_usd", "REAL"), ("landed_per_gb", "REAL"),
              ("units", "INTEGER"), ("verdict", "TEXT"), ("needs", "TEXT"),
-             ("make", "TEXT"), ("model", "TEXT"), ("vram_unit", "INTEGER"))
+             ("make", "TEXT"), ("model", "TEXT"), ("vram_unit", "INTEGER"),
+             # item-page check (pagecheck.py): the search card is not the offer
+             ("page_ts", "REAL"), ("page_ok", "INTEGER"), ("page_note", "TEXT"),
+             ("page_usd", "REAL"), ("page_src_price", "REAL"))
 
 _CATALOG_PATH = Path(__file__).parent / "catalog.yaml"
 
@@ -219,7 +222,8 @@ class Store:
         key = f"{c.source}:{c.ext_id}"
         old = self.db.execute(
             "SELECT usd, hits, last_price_change, currency, title, verdict, "
-            "vram, units, catalog_id FROM listings WHERE key=?", (key,)).fetchone()
+            "vram, units, catalog_id, price, page_usd, page_src_price "
+            "FROM listings WHERE key=?", (key,)).fetchone()
         # the gate judged a title AS a family: a catalog edit that moves the
         # title elsewhere (Strix box out of GB10, 2x 3090 out of the 48GB
         # mod) voids that judgement, so it is re-gated, never inherited
@@ -236,6 +240,12 @@ class Store:
                 c.meta["fx_pending"] = True
         if usd is None and old:
             usd = self.to_usd(c.price, c.currency) if c.price else old["usd"]
+        # the item page priced the option the title names (a 128GB SKU, not
+        # the 64GB the search card quotes): hold it while the card is unchanged
+        page_held = bool(old and old["page_usd"] and c.price is not None
+                         and old["page_src_price"] == c.price)
+        if page_held:
+            usd = old["page_usd"]
         prev_usd = old["usd"] if old else None
         change = old["last_price_change"] if old else None
         if usd and prev_usd and abs(usd - prev_usd) / prev_usd > 0.005:
@@ -285,7 +295,13 @@ class Store:
             units=excluded.units,
             verdict=CASE WHEN listings.title=excluded.title
                          AND listings.catalog_id IS excluded.catalog_id
-                         THEN listings.verdict END
+                         THEN listings.verdict END,
+            page_ts=CASE WHEN listings.price IS excluded.price
+                          AND listings.title=excluded.title
+                         THEN listings.page_ts END,
+            page_ok=CASE WHEN listings.price IS excluded.price
+                          AND listings.title=excluded.title
+                         THEN listings.page_ok END
         """, (key, c.source, c.ext_id, c.url, c.title, c.price, c.currency, usd,
               prev_usd, c.region, c.country, c.condition, c.stock, c.evidence,
               entry["id"] if matched else (entry["id"] if entry else None),
@@ -378,6 +394,7 @@ class Store:
         return self.db.execute(
             "SELECT * FROM listings WHERE matched=1 AND last_seen>? "
             "AND landed_per_gb IS NOT NULL AND COALESCE(verdict,'') != 'no' "
+            "AND COALESCE(page_ok, 1) != 0 "
             "ORDER BY landed_per_gb ASC", (cut,)).fetchall()
 
     def record_sightings(self) -> int:
@@ -393,6 +410,25 @@ class Store:
                               (day, time.time() - 26 * 3600))
         self.db.commit()
         return cur.rowcount
+
+    def set_page(self, key: str, ok: bool, note: str,
+                 usd: float | None = None) -> None:
+        """Record an item-page check. A price for the option the title names
+        replaces the search card's (usually the cheapest SKU's) price."""
+        r = self.db.execute("SELECT price, usd, vram, ship FROM listings "
+                            "WHERE key=?", (key,)).fetchone()
+        if r is None:
+            return
+        if usd and r["vram"]:
+            land = landed(usd, r["ship"])
+            self.db.execute(
+                "UPDATE listings SET usd=?, landed_usd=?, usd_per_gb=?, "
+                "landed_per_gb=?, page_usd=?, page_src_price=? WHERE key=?",
+                (usd, land, round(usd / r["vram"], 2), round(land / r["vram"], 2),
+                 usd, r["price"], key))
+        self.db.execute("UPDATE listings SET page_ts=?, page_ok=?, page_note=? "
+                        "WHERE key=?", (time.time(), int(ok), note[:200], key))
+        self.db.commit()
 
     def pending_verdicts(self, limit: int = 60) -> list[sqlite3.Row]:
         return self.db.execute(

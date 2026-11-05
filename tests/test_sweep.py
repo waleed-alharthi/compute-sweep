@@ -264,5 +264,136 @@ class GateLoopTest(unittest.TestCase):
         self.assertEqual(c.call_count, 6)  # 3 judgements x 2 models
 
 
+def _fixture(name: str) -> str:
+    import gzip
+    from pathlib import Path
+    return gzip.open(Path(__file__).parent / "fixtures" / name, "rt").read()
+
+
+class PageParseTest(unittest.TestCase):
+    """Real item pages captured 2026-11-05."""
+
+    def test_aliexpress_zero_sold_dgx_spark(self):
+        from fp4sweep.pagecheck import parse_aliexpress
+        f = parse_aliexpress(_fixture("ae-dgxspark-0sold.html.gz"))
+        self.assertFalse(f["dead"])
+        self.assertEqual(f["sold"], 0)
+        self.assertEqual(f["store"], "Canvas HHH Store")
+        self.assertEqual(f["followers"], 88)
+        self.assertEqual(f["price"], "OMR1,080.54")
+
+    def test_aliexpress_delisted(self):
+        from fp4sweep.pagecheck import parse_aliexpress
+        self.assertTrue(parse_aliexpress(_fixture("ae-delisted.html.gz"))["dead"])
+
+    def test_aliexpress_sold_count(self):
+        from fp4sweep.pagecheck import parse_aliexpress
+        h = '<span class="reviewer--sold--ytPeoEy">1,234 sold</span>'
+        self.assertEqual(parse_aliexpress(h)["sold"], 1234)
+        h = '<span class="reviewer--sold--ytPeoEy">5K+ sold</span>'
+        self.assertEqual(parse_aliexpress(h)["sold"], 5000)
+
+    def test_dhgate_store_and_options(self):
+        from fp4sweep.pagecheck import option_for, parse_dhgate
+        f = parse_dhgate(_fixture("dhgate-szbox-multisku.html.gz"))
+        self.assertEqual((f["positive"], f["orders"]), (66.7, 5))
+        self.assertEqual(f["price"], "US $1,888.65")
+        self.assertEqual(len(f["options"]), 20)
+        hits, needed = option_for(f["options"], 128)
+        self.assertTrue(needed)
+        self.assertEqual(hits[0], "US-LPDDR5 128GB 4TB")
+
+    def test_alibaba_live_page_whose_reviews_say_unavailable(self):
+        from fp4sweep.pagecheck import parse_alibaba
+        f = parse_alibaba(_fixture("alibaba-live-review-mentions-unavailable.html.gz"))
+        self.assertFalse(f["dead"])
+        self.assertEqual((f["rating"], f["ratings"]), (4.7, 48))
+
+    def test_alibaba_store_rating(self):
+        from fp4sweep.pagecheck import parse_alibaba
+        f = parse_alibaba(_fixture("alibaba-p40-rated.html.gz"))
+        self.assertEqual((f["rating"], f["ratings"], f["years"]), (4.4, 95, 7))
+
+
+class PageJudgeTest(unittest.TestCase):
+    def test_option_for(self):
+        from fp4sweep.pagecheck import option_for
+        self.assertEqual(option_for(["24GB"], 24), ([], False))
+        self.assertEqual(option_for(["Black", "White"], 32), ([], False))
+        # only smaller memory on offer: the 128GB in the title is not for sale
+        self.assertEqual(option_for(["US-LPDDR5 64GB 2TB", "US-LPDDR5 64GB 4TB"], 128),
+                         ([], True))
+        # storage sizes are not memory
+        self.assertEqual(option_for(["128GB 1TB SSD", "128GB 2TB SSD"], 128), ([], False))
+
+    def test_judge(self):
+        from fp4sweep.pagecheck import judge
+        ae0 = {"dead": False, "sold": 0}
+        self.assertFalse(judge("aliexpress", ae0, 22.0, 27.0, None, False)[0])
+        self.assertTrue(judge("aliexpress", ae0, 30.0, 27.0, None, False)[0])   # at/above street
+        self.assertTrue(judge("aliexpress", {"sold": 40}, 22.0, 27.0, None, False)[0])
+        self.assertFalse(judge("dhgate", {"orders": 500}, 30.0, 27.0, None, True)[0])
+        self.assertTrue(judge("dhgate", {"orders": 500}, 30.0, 27.0, 3155.0, True)[0])
+        self.assertFalse(judge("alibaba", {"dead": True}, 30.0, 27.0, None, False)[0])
+        self.assertTrue(judge("alibaba", {"ratings": 95}, 10.0, 27.0, None, False)[0])
+
+
+class PageRunTest(unittest.TestCase):
+    def _db(self):
+        db = connect(":memory:")
+        store = Store(db)
+        rows = [("aliexpress", "1", "NVIDIA DGX Spark 128GB", 2800.0),
+                ("dhgate", "2", "NVIDIA DGX Spark 128GB GB10", 3000.0),
+                ("ebay", "3", "NVIDIA DGX Spark 128GB Founders", 3200.0),
+                ("ebay", "4", "NVIDIA DGX Spark 128GB new", 3400.0)]
+        for src, i, t, usd in rows:
+            store.upsert(Candidate(source=src, ext_id=i, url=f"https://x/{i}", title=t,
+                                   price=usd, currency="USD"), CATALOG)
+        db.execute("UPDATE listings SET verdict='yes'")
+        db.commit()
+        return db, store
+
+    def test_drop_then_next_cheapest_gets_checked(self):
+        from fp4sweep import pagecheck
+        from fp4sweep.run import board
+        db, store = self._db()
+        seen = []
+
+        def fake(store_, factory, row, median):
+            seen.append(row["key"])
+            if row["source"] == "aliexpress":
+                return False, "unproven seller", None
+            return True, "page ok", 3155.0  # the 128GB option's price
+        with mock.patch.object(pagecheck, "check_row", side_effect=fake):
+            self.assertEqual(pagecheck.run(store, board, None, budget=10), (1, 1))
+        self.assertEqual(seen, ["aliexpress:1", "dhgate:2"])
+        keys = [r["key"] for r in store.active()]
+        self.assertNotIn("aliexpress:1", keys)
+        r = db.execute("SELECT usd, page_ok FROM listings WHERE key='dhgate:2'").fetchone()
+        self.assertEqual((r[0], r[1]), (3155.0, 1))
+        # the next sweep sees the same card: the option price holds, no fake drop
+        store.upsert(Candidate(source="dhgate", ext_id="2", url="https://x/2",
+                               title="NVIDIA DGX Spark 128GB GB10", price=3000.0,
+                               currency="USD"), CATALOG)
+        r = db.execute("SELECT usd, page_ok FROM listings WHERE key='dhgate:2'").fetchone()
+        self.assertEqual((r[0], r[1]), (3155.0, 1))
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM price_events "
+                                    "WHERE key='dhgate:2'").fetchone()[0], 0)
+        # a new card price voids the check
+        store.upsert(Candidate(source="dhgate", ext_id="2", url="https://x/2",
+                               title="NVIDIA DGX Spark 128GB GB10", price=2900.0,
+                               currency="USD"), CATALOG)
+        r = db.execute("SELECT usd, page_ok, page_ts FROM listings WHERE key='dhgate:2'").fetchone()
+        self.assertEqual((r[0], r[1], r[2]), (2900.0, None, None))
+
+    def test_a_page_that_will_not_load_is_retried_later_not_dropped(self):
+        from fp4sweep import pagecheck
+        from fp4sweep.run import board
+        db, store = self._db()
+        with mock.patch.object(pagecheck, "check_row", side_effect=TimeoutError()):
+            self.assertEqual(pagecheck.run(store, board, None, budget=10), (0, 0))
+        self.assertIn("aliexpress:1", [r["key"] for r in store.active()])
+
+
 if __name__ == "__main__":
     unittest.main()

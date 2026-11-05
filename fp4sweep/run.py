@@ -14,7 +14,7 @@ import time
 
 from . import adapters
 from .config import EXPORT_PATH
-from . import verify
+from . import pagecheck, verify
 from .fetch import FetchError, _direct, close_stealth
 from .store import Store, connect, load_catalog, refresh_fx
 
@@ -70,6 +70,31 @@ def _diverse(rows, n: int, per_key: int = 2) -> list:
         if len(out) >= n:
             break
     return out
+
+
+def _servers(active) -> list:
+    """Complete multi-GPU machines and lots: whole servers a buyer plugs in
+    once, ranked by the same landed $/GB as everything else."""
+    return _diverse([r for r in active if (r["units"] or 1) >= 2
+                     and "server" in (r["title"] or "").lower()
+                     + (r["model"] or "").lower()
+                     or (r["units"] or 1) >= 4], 12)
+
+
+def board(active) -> list:
+    """Every row the walls would show: BEST, SERVERS and each family's
+    cheapest (the STREET row). The item-page check walks exactly this."""
+    rows, seen, fams = [], set(), set()
+    street = []
+    for r in active:
+        if r["product"] not in fams:
+            fams.add(r["product"])
+            street.append(r)
+    for r in _diverse(active, 40) + _servers(active) + street:
+        if r["key"] not in seen:
+            seen.add(r["key"])
+            rows.append(r)
+    return rows
 
 
 def _fit(gb: int) -> str:
@@ -164,13 +189,7 @@ def export(db):
         "news": [_row(r, now) for r in news[:20]],
         "drops": [dict(_row(r, now), drop_pct=pct) for r, pct in drops[:10]],
         "best": [_row(r, now) for r in _diverse(active, 40)],
-        # complete multi-GPU machines and lots: whole servers a buyer plugs
-        # in once, ranked by the same landed $/GB as everything else
-        "servers": [_row(r, now) for r in _diverse(
-            [r for r in active if (r["units"] or 1) >= 2
-             and "server" in (r["title"] or "").lower()
-             + (r["model"] or "").lower()
-             or (r["units"] or 1) >= 4], 12)],
+        "servers": [_row(r, now) for r in _servers(active)],
         "street": street,
         "unknown": [{"title": r["title"][:80], "src": r["source"],
                      "usd": r["usd"], "url": r["url"]} for r in unknown[:20]],
@@ -190,9 +209,19 @@ def status(db):
     print(f"export: {EXPORT_PATH}")
 
 
+def _pagecheck(db, budget: int = 60) -> None:
+    from .fetch import stealth_page
+    try:
+        ok, bad = pagecheck.run(Store(db), board, stealth_page, budget=budget)
+    finally:
+        close_stealth()
+    print(f"[pagecheck] {ok} pages ok, {bad} dropped", flush=True)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="fp4sweep")
-    ap.add_argument("cmd", choices=["crawl", "export", "status", "verify", "rematch"])
+    ap.add_argument("cmd", choices=["crawl", "export", "status", "verify", "rematch",
+                                       "pagecheck"])
     ap.add_argument("--only")
     args = ap.parse_args(argv)
     db = connect()
@@ -203,6 +232,7 @@ def main(argv=None):
             close_stealth()
         ok, bad = verify.run(Store(db))
         print(f"[verify] {ok} real, {bad} rejected")
+        _pagecheck(db)
         print(f"[sightings] {Store(db).record_sightings()} rows for today")
         export(db)
     elif args.cmd == "verify":
@@ -214,6 +244,9 @@ def main(argv=None):
         print(f"[rematch] {Store(db).rematch(load_catalog())}")
         ok, bad = verify.run(Store(db), max_batches=120)
         print(f"[verify] {ok} real, {bad} rejected")
+        export(db)
+    elif args.cmd == "pagecheck":
+        _pagecheck(db, budget=150)
         export(db)
     elif args.cmd == "export":
         export(db)
