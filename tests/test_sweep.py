@@ -338,6 +338,15 @@ class PageJudgeTest(unittest.TestCase):
         self.assertTrue(judge("alibaba", {"ratings": 95}, 10.0, 27.0, None, False)[0])
 
 
+class StreetRowTest(unittest.TestCase):
+    def test_family_row_is_the_cheapest_single_unit(self):
+        from fp4sweep.run import _street_rows
+        rows = [{"product": "W6800", "units": 25, "key": "lot"},
+                {"product": "W6800", "units": 1, "key": "one"},
+                {"product": "MI50", "units": 10, "key": "mi50lot"}]
+        self.assertEqual([r["key"] for r in _street_rows(rows)], ["one", "mi50lot"])
+
+
 class PageRunTest(unittest.TestCase):
     def _db(self):
         db = connect(":memory:")

@@ -81,16 +81,23 @@ def _servers(active) -> list:
                      or (r["units"] or 1) >= 4], 12)
 
 
+def _street_rows(active) -> list:
+    """Each family's representative row: its cheapest SINGLE unit, falling
+    back to a lot only when no single unit is live. A 25-card lot's $25,845
+    is not what one W6800 costs."""
+    single, any_ = {}, {}
+    for r in active:  # active is cheapest-first
+        any_.setdefault(r["product"], r)
+        if (r["units"] or 1) == 1:
+            single.setdefault(r["product"], r)
+    return [single.get(p) or any_[p] for p in any_]
+
+
 def board(active) -> list:
     """Every row the walls would show: BEST, SERVERS and each family's
     cheapest (the STREET row). The item-page check walks exactly this."""
-    rows, seen, fams = [], set(), set()
-    street = []
-    for r in active:
-        if r["product"] not in fams:
-            fams.add(r["product"])
-            street.append(r)
-    for r in _diverse(active, 40) + _servers(active) + street:
+    rows, seen = [], set()
+    for r in _diverse(active, 40) + _servers(active) + _street_rows(active):
         if r["key"] not in seen:
             seen.add(r["key"])
             rows.append(r)
@@ -162,10 +169,8 @@ def export(db):
         return row
 
     street = []
-    for r in active:
+    for r in _street_rows(active):
         p = r["product"]
-        if p in [s["product"] for s in street]:
-            continue
         gb = r["vram"] or 0
         t = trends.get(p) or []
         street.append({
