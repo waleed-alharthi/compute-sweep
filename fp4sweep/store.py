@@ -57,7 +57,9 @@ _CATALOG_PATH = Path(__file__).parent / "catalog.yaml"
 
 def connect(path=DB_PATH) -> sqlite3.Connection:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(path)
+    # the hourly crawl, a manual verify/rematch and the gate all write here;
+    # wait out a neighbour's commit instead of failing at the 5 s default
+    db = sqlite3.connect(path, timeout=30.0)
     db.row_factory = sqlite3.Row
     db.executescript(_SCHEMA)
     have = {r[1] for r in db.execute("PRAGMA table_info(listings)")}
@@ -313,9 +315,11 @@ class Store:
         no longer accepts (laptops, sub-floor) leave the board."""
         cut = time.time() - hours * 3600
         n = {"moved": 0, "new": 0, "dropped": 0, "shrunk": 0}
-        for r in self.db.execute(
+        for i, r in enumerate(self.db.execute(
                 "SELECT key, title, usd, landed_usd, catalog_id, matched, vram, "
-                "units, verdict FROM listings WHERE last_seen>?", (cut,)).fetchall():
+                "units, verdict FROM listings WHERE last_seen>?", (cut,)).fetchall()):
+            if i % 200 == 199:
+                self.db.commit()  # short write locks: a crawl may be upserting
             title = r["title"] or ""
             if WANTED_RE.search(title):
                 continue
